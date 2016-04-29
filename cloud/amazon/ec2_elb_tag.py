@@ -1,4 +1,22 @@
 #!/usr/bin/python
+# -*- coding: utf-8 -*-
+#
+# (c) 2016, René Moser <mail@renemoser.net>
+#
+# This file is part of Ansible
+#
+# Ansible is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# Ansible is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with Ansible. If not, see <http://www.gnu.org/licenses/>.
 
 DOCUMENTATION = '''
 ---
@@ -6,6 +24,7 @@ module: ec2_elb_tag
 short_description: create and remove tag(s) to ELBs.
 description:
     - Creates, removes and lists tags from any ELB. The ELB is referenced by its name.  This module has a dependency on boto3.
+version_added: 2.2
 options:
   name:
     description:
@@ -60,6 +79,14 @@ EXAMPLES = '''
     tags:
       Name: uberlb
       env: prod
+'''
+
+RETURN = '''
+tags:
+    description: ELB tags, after the changes are made.
+    returned: success
+    type: dict
+    sample: {"Name": "uberlb", "foo": "bar", "env": "prod"}
 '''
 
 try:
