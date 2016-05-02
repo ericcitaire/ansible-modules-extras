@@ -82,6 +82,11 @@ EXAMPLES = '''
 '''
 
 RETURN = '''
+name:
+    description: ELB name.
+    returned: success
+    type: str
+    sample: "uberlb"
 tags:
     description: ELB tags, after the changes are made.
     returned: success
@@ -157,7 +162,7 @@ def main():
         actual_tags = [ { 'Key': key, 'Value': str(actual_tags[key]) } for key in actual_tags if key not in tag_keys_to_remove ]
       changed = True
 
-  module.exit_json(changed=changed, tags=actual_tags)
+  module.exit_json(changed=changed, name=name, tags=actual_tags)
 
 # import module snippets
 from ansible.module_utils.basic import *
