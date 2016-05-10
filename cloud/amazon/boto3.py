@@ -80,8 +80,15 @@ EXAMPLES = '''
         - BOOTSTRAPPING
         - RUNNING
         - WAITING
-      CreatedAfter: "2016-05-03 13:30:00"
+  changed_when: False
   register: emr
+
+- set_fact:
+    emr_cluster_exists: "{{ emr.response.Clusters | selectattr('Name', 'equalto', 'my-jobflow') | list | length > 0 }}"
+
+- set_fact:
+    emr_cluster_id: "{{ emr.response.Clusters | selectattr('Name', 'equalto', 'my-jobflow') | map(attribute='Id') | first }}"
+  when: emr_cluster_exists
 
 # if 'my-jobflow' cluster does not exist, create it.
 - name: Create EMR Cluster
@@ -94,6 +101,7 @@ EXAMPLES = '''
       Applications:
         - Name: Hive
       Instances:
+        KeepJobFlowAliveWhenNoSteps: True
         Ec2KeyName: my-key
         Ec2SubnetId: subnet-xxxxxxx
         EmrManagedSlaveSecurityGroup: sg-xxxxxxx
@@ -111,15 +119,14 @@ EXAMPLES = '''
       JobFlowRole: EMR_EC2_DefaultRole
       ServiceRole: EMR_DefaultRole
       ReleaseLabel: emr-4.6.0
-      Steps:
-        - HadoopJarStep:
-            Args:
-              - state-pusher-script
-            Jar: command-runner.jar
-          ActionOnFailure: TERMINATE_CLUSTER
-          Name: Setup Hadoop Debugging
-     VisibleToAllUsers: True
-  when: "'my-jobflow' not in (emr.response.Clusters | map(attribute='Name'))"
+      VisibleToAllUsers: True
+  when: not emr_cluster_exists
+  register: emr_create
+
+- set_fact:
+    emr_cluster_id: "{{ emr_create.response.JobFlowId }}"
+    emr_cluster_exists: True
+  when: not emr_cluster_exists
 '''
 
 RETURN = '''
