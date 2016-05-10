@@ -127,7 +127,7 @@ response:
     description: boto3 response, depending on the operation called. See boto3 documentation.
     returned: success
     type: dict
-    sample: { "Clusters": [ ], "ResponseMetadata": { "HTTPStatusCode": 200, "RequestId": "xxxxxxxx-xxxx-xxxx-xxxx-xxx"xxxxxxxx" } }
+    sample: { "Clusters": [ ], "ResponseMetadata": { "HTTPStatusCode": 200, "RequestId": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" } }
 '''
 
 try:
