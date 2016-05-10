@@ -97,55 +97,55 @@ RETURN = '''
 
 from time import sleep
 try:
-  import boto3
-  from botocore.exceptions import *
-  HAS_BOTO3 = True
+    import boto3
+    from botocore.exceptions import *
+    HAS_BOTO3 = True
 except ImportError:
-  HAS_BOTO3 = False
+    HAS_BOTO3 = False
 
 def main():
-  module = AnsibleModule(
-    argument_spec = dict(
-      service=dict(required=True, type='str', aliases=['name']),
-      until=dict(required=True, type='str'),
-      parameters=dict(default={}, type='dict'),
-      delay=dict(default=None, type='int'),
-      max_attempts=dict(default=None, type='int'),
-      region=dict(type='str'),
-      aws_access_key=dict(type='str', aliases=['ec2_access_key', 'access_key']),
-      aws_secret_key=dict(type='str', aliases=['ec2_secret_key', 'secret_key'])
-    ),
-    supports_check_mode=False
-  )
+    module = AnsibleModule(
+        argument_spec = dict(
+            service=dict(required=True, type='str', aliases=['name']),
+            until=dict(required=True, type='str'),
+            parameters=dict(default={}, type='dict'),
+            delay=dict(default=None, type='int'),
+            max_attempts=dict(default=None, type='int'),
+            region=dict(type='str'),
+            aws_access_key=dict(type='str', aliases=['ec2_access_key', 'access_key']),
+            aws_secret_key=dict(type='str', aliases=['ec2_secret_key', 'secret_key'])
+        ),
+        supports_check_mode=False
+    )
 
-  if not HAS_BOTO3:
-    module.fail_json(msg='boto3 is required for this module')
+    if not HAS_BOTO3:
+        module.fail_json(msg='boto3 is required for this module')
 
-  service = module.params.get('service')
-  until = module.params.get('until')
-  parameters = module.params.get('parameters')
-  delay = module.params.get('delay')
-  max_attempts = module.params.get('max_attempts')
-  region = module.params.get('region')
-  aws_access_key = module.params.get('aws_access_key')
-  aws_secret_key = module.params.get('aws_secret_key')
+    service = module.params.get('service')
+    until = module.params.get('until')
+    parameters = module.params.get('parameters')
+    delay = module.params.get('delay')
+    max_attempts = module.params.get('max_attempts')
+    region = module.params.get('region')
+    aws_access_key = module.params.get('aws_access_key')
+    aws_secret_key = module.params.get('aws_secret_key')
 
-  try:
-    client = boto3.client(service, region_name=region, aws_access_key_id=aws_access_key, aws_secret_access_key=aws_secret_key)
-    if until not in client.waiter_names:
-      module.fail_json(msg='Waiter "{}" does not exist in "{}" client.'.format(until, service))
-    waiter = client.get_waiter(until)
-    if delay is not None:
-      waiter.config.delay = delay
-    if max_attempts is not None:
-      waiter.config.max_attempts = max_attempts
-    response = waiter.wait(**parameters)
-  except Exception as e:
-    module.fail_json(msg=e.message)
-  
-  module.exit_json(changed=False)
+    try:
+        client = boto3.client(service, region_name=region, aws_access_key_id=aws_access_key, aws_secret_access_key=aws_secret_key)
+        if until not in client.waiter_names:
+            module.fail_json(msg='Waiter "{}" does not exist in "{}" client.'.format(until, service))
+        waiter = client.get_waiter(until)
+        if delay is not None:
+            waiter.config.delay = delay
+        if max_attempts is not None:
+            waiter.config.max_attempts = max_attempts
+        response = waiter.wait(**parameters)
+    except Exception as e:
+        module.fail_json(msg=e.message)
+    
+    module.exit_json(changed=False)
 
 # import module snippets
 from ansible.module_utils.basic import *
 if __name__ == '__main__':
-  main()
+    main()

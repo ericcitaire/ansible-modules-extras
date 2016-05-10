@@ -131,75 +131,75 @@ response:
 '''
 
 try:
-  import boto3
-  from botocore.exceptions import *
-  HAS_BOTO3 = True
+    import boto3
+    from botocore.exceptions import *
+    HAS_BOTO3 = True
 except ImportError:
-  HAS_BOTO3 = False
+    HAS_BOTO3 = False
 
 def get_operation_method(client, operation_name):
-  valid = True
-  # private method
-  if operation_name[0] == '_':
-    valid = False
-  # client utility methods
-  utility_methods = [
-      'can_paginate',
-      'generate_presigned_url',
-      'get_paginator',
-      'get_waiter',
-      'meta',
-      'waiter_names'
-    ]
-  if operation_name in utility_methods:
-    valid = False
-  # not an attribute
-  if operation_name not in dir(client):
-    valid = False
-  # not callable
-  operation_method = getattr(client, operation_name, None) if valid else None
-  if not callable(operation_method):
-    valid = False
-  if valid:
-    return operation_method
-  else:
-    return None
+    valid = True
+    # private method
+    if operation_name[0] == '_':
+        valid = False
+    # client utility methods
+    utility_methods = [
+            'can_paginate',
+            'generate_presigned_url',
+            'get_paginator',
+            'get_waiter',
+            'meta',
+            'waiter_names'
+        ]
+    if operation_name in utility_methods:
+        valid = False
+    # not an attribute
+    if operation_name not in dir(client):
+        valid = False
+    # not callable
+    operation_method = getattr(client, operation_name, None) if valid else None
+    if not callable(operation_method):
+        valid = False
+    if valid:
+        return operation_method
+    else:
+        return None
 
 def main():
-  module = AnsibleModule(
-    argument_spec = dict(
-      service=dict(required=True, type='str', aliases=['name']),
-      operation=dict(required=True, type='str'),
-      parameters=dict(default={}, type='dict'),
-      region=dict(type='str'),
-      aws_access_key=dict(type='str', aliases=['ec2_access_key', 'access_key']),
-      aws_secret_key=dict(type='str', aliases=['ec2_secret_key', 'secret_key'])
-    ),
-    supports_check_mode=False
-  )
+    module = AnsibleModule(
+        argument_spec = dict(
+            service=dict(required=True, type='str', aliases=['name']),
+            operation=dict(required=True, type='str'),
+            parameters=dict(default={}, type='dict'),
+            region=dict(type='str'),
+            aws_access_key=dict(type='str', aliases=['ec2_access_key', 'access_key']),
+            aws_secret_key=dict(type='str', aliases=['ec2_secret_key', 'secret_key'])
+        ),
+        supports_check_mode=False
+    )
 
-  if not HAS_BOTO3:
-    module.fail_json(msg='boto3 is required for this module')
+    if not HAS_BOTO3:
+        module.fail_json(msg='boto3 is required for this module')
 
-  service = module.params.get('service')
-  operation = module.params.get('operation')
-  parameters = module.params.get('parameters')
-  region = module.params.get('region')
-  aws_access_key = module.params.get('aws_access_key')
-  aws_secret_key = module.params.get('aws_secret_key')
+    service = module.params.get('service')
+    operation = module.params.get('operation')
+    parameters = module.params.get('parameters')
+    region = module.params.get('region')
+    aws_access_key = module.params.get('aws_access_key')
+    aws_secret_key = module.params.get('aws_secret_key')
 
-  try:
-    client = boto3.client(service, region_name=region, aws_access_key_id=aws_access_key, aws_secret_access_key=aws_secret_key)
-    operation_method = get_operation_method(client, operation)
-    if not operation_method:
-      module.fail_json(msg='"{}" is not a valid operation for service "{}".'.format(operation, name))
-    response = operation_method(**parameters)
-  except Exception as e:
-    module.fail_json(msg=e.message)
-  
-  module.exit_json(changed=True, response=response)
+    try:
+        client = boto3.client(service, region_name=region, aws_access_key_id=aws_access_key, aws_secret_access_key=aws_secret_key)
+        operation_method = get_operation_method(client, operation)
+        if not operation_method:
+            module.fail_json(msg='"{}" is not a valid operation for service "{}".'.format(operation, name))
+        response = operation_method(**parameters)
+    except Exception as e:
+        module.fail_json(msg=e.message)
+    
+    module.exit_json(changed=True, response=response)
 
 # import module snippets
 from ansible.module_utils.basic import *
 if __name__ == '__main__':
-  main()
+    main()
