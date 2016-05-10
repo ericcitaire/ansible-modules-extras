@@ -39,17 +39,23 @@ options:
     default: present
     choices: ['present', 'absent', 'list']
     aliases: []
+  region:
+    description:
+      - AWS region.
+    required: false
+    default: null
+    aliases: []
   aws_access_key:
     description:
       - AWS access key.
     required: false
-    default: present
+    default: null
     aliases: ['ec2_access_key', 'access_key']
   aws_secret_key:
     description:
       - AWS secret key.
     required: false
-    default: present
+    default: null
     aliases: ['ec2_secret_key', 'secret_key']
   tags:
     description:
