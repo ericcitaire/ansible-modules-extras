@@ -19,6 +19,10 @@
 # along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
 #
 
+ANSIBLE_METADATA = {'status': ['preview'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 ---
 module: composer
@@ -103,23 +107,26 @@ requirements:
     - composer installed in bin path (recommended /usr/local/bin)
 notes:
     - Default options that are always appended in each execution are --no-ansi, --no-interaction and --no-progress if available.
+    - We received reports about issues on macOS if composer was installed by Homebrew. Please use the official install method to avoid it.
 '''
 
 EXAMPLES = '''
 # Downloads and installs all the libs and dependencies outlined in the /path/to/project/composer.lock
-- composer: command=install working_dir=/path/to/project
+- composer:
+    command: install
+    working_dir: /path/to/project
 
 - composer:
-    command: "require"
-    arguments: "my/package"
-    working_dir: "/path/to/project"
+    command: require
+    arguments: my/package
+    working_dir: /path/to/project
 
 # Clone project and install with all dependencies
 - composer:
-    command: "create-project"
-    arguments: "package/package /path/to/project ~1.0"
-    working_dir: "/path/to/project"
-    prefer_dist: "yes"
+    command: create-project
+    arguments: package/package /path/to/project ~1.0
+    working_dir: /path/to/project
+    prefer_dist: yes
 '''
 
 import os

@@ -18,6 +18,10 @@
 # You should have received a copy of the GNU General Public License
 # along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
 
+ANSIBLE_METADATA = {'status': ['preview'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 ---
 module: vmware_vm_shell
@@ -59,7 +63,6 @@ options:
             - 'inventory_path'
             - 'vm_name'
         required: False
-        default: None
     vm_username:
         description:
             - The user to connect to the VM.
@@ -146,11 +149,11 @@ def main():
     if not HAS_PYVMOMI:
         module.fail_json(changed=False, msg='pyvmomi is required for this module')
 
-    datacenter_name = p['datacenter']
-    cluster_name = p['cluster']
 
     try:
         p = module.params
+        datacenter_name = p['datacenter']
+        cluster_name = p['cluster']
         content = connect_to_api(module)
 
         datacenter = None
@@ -185,4 +188,3 @@ from ansible.module_utils.basic import *
 
 if __name__ == '__main__':
     main()
-

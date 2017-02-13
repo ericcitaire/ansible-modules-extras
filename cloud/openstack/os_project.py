@@ -21,6 +21,12 @@ try:
 except ImportError:
     HAS_SHADE = False
 
+from distutils.version import StrictVersion
+
+ANSIBLE_METADATA = {'status': ['preview'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 ---
 module: os_project
@@ -46,7 +52,8 @@ options:
      default: None
    domain_id:
      description:
-        - Domain id to create the project in if the cloud supports domains
+        - Domain id to create the project in if the cloud supports domains.
+          The domain_id parameter requires shade >= 1.8.0
      required: false
      default: None
      aliases: ['domain']
@@ -111,7 +118,7 @@ def _needs_update(module, project):
     keys = ('description', 'enabled')
     for key in keys:
         if module.params[key] is not None and module.params[key] != project.get(key):
-            return True       
+            return True
 
     return False
 
@@ -160,6 +167,9 @@ def main():
     enabled = module.params['enabled']
     state = module.params['state']
 
+    if domain and StrictVersion(shade.__version__) < StrictVersion('1.8.0'):
+        module.fail_json(msg="The domain argument requires shade >=1.8.0")
+
     try:
         if domain:
             opcloud = shade.operator_cloud(**module.params)
@@ -176,9 +186,13 @@ def main():
                 except:
                     # Ok, let's hope the user is non-admin and passing a sane id
                     pass
-        
+
         cloud = shade.openstack_cloud(**module.params)
-        project = cloud.get_project(name)
+
+        if domain:
+            project = cloud.get_project(name, domain_id=domain)
+        else:
+            project = cloud.get_project(name)
 
         if module.check_mode:
             module.exit_json(changed=_system_state_change(module, project))

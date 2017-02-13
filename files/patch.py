@@ -19,6 +19,10 @@
 # You should have received a copy of the GNU General Public License
 # along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
 
+ANSIBLE_METADATA = {'status': ['stableinterface'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 ---
 module: patch
@@ -185,11 +189,14 @@ def main():
             apply_patch( patch_func, p.src, p.basedir, dest_file=p.dest, binary=p.binary, strip=p.strip,
                          dry_run=module.check_mode, backup=p.backup )
             changed = True
-        except PatchError, e:
+        except PatchError:
+            e = get_exception()
             module.fail_json(msg=str(e))
 
     module.exit_json(changed=changed)
 
 # import module snippets
 from ansible.module_utils.basic import *
-main()
+
+if __name__ == '__main__':
+    main()

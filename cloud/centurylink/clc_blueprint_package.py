@@ -19,6 +19,10 @@
 # along with Ansible.  If not, see <http://www.gnu.org/licenses/>
 #
 
+ANSIBLE_METADATA = {'status': ['preview'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 module: clc_blueprint_package
 short_description: deploys a blue print package on a set of servers in CenturyLink Cloud.
@@ -81,11 +85,6 @@ EXAMPLES = '''
 '''
 
 RETURN = '''
-changed:
-    description: A flag indicating if any change was made or not
-    returned: success
-    type: boolean
-    sample: True
 server_ids:
     description: The list of server ids that are changed
     returned: success

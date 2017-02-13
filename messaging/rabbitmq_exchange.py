@@ -19,6 +19,10 @@
 # along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
 #
 
+ANSIBLE_METADATA = {'status': ['preview'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 ---
 module: rabbitmq_exchange
@@ -28,7 +32,7 @@ version_added: "2.0"
 short_description: This module manages rabbitMQ exchanges
 description:
   - This module uses rabbitMQ Rest API to create/delete exchanges
-requirements: [ python requests ]
+requirements: [ "requests >= 1.0.0" ]
 options:
     name:
         description:
@@ -100,10 +104,14 @@ options:
 
 EXAMPLES = '''
 # Create direct exchange
-- rabbitmq_exchange: name=directExchange
+- rabbitmq_exchange:
+    name: directExchange
 
 # Create topic exchange on vhost
-- rabbitmq_exchange: name=topicExchange type=topic vhost=myVhost
+- rabbitmq_exchange:
+    name: topicExchange
+    type: topic
+    vhost: myVhost
 '''
 
 import requests
@@ -135,7 +143,7 @@ def main():
         urllib.quote(module.params['vhost'],''),
         urllib.quote(module.params['name'],'')
     )
-    
+
     # Check if exchange already exists
     r = requests.get( url, auth=(module.params['login_user'],module.params['login_password']))
 
@@ -215,4 +223,6 @@ def main():
 
 # import module snippets
 from ansible.module_utils.basic import *
-main()
+
+if __name__ == '__main__':
+    main()

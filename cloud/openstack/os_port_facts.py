@@ -21,6 +21,10 @@ try:
 except ImportError:
     HAS_SHADE = False
 
+ANSIBLE_METADATA = {'status': ['preview'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 module: os_port_facts
 short_description: Retrieve facts about ports within OpenStack.
@@ -162,7 +166,7 @@ openstack_ports:
             description: The MAC address.
             returned: success
             type: string
-            sample: "fa:16:30:5f:10:f1"
+            sample: "00:00:5E:00:53:42"
         name:
             description: The port name.
             returned: success

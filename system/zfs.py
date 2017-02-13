@@ -19,6 +19,10 @@
 # along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
 #
 
+ANSIBLE_METADATA = {'status': ['preview'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 ---
 module: zfs
@@ -33,7 +37,7 @@ options:
     required: true
   state:
     description:
-      - Whether to create (C(present)), or remove (C(absent)) a 
+      - Whether to create (C(present)), or remove (C(absent)) a
         file system, snapshot or volume. All parents/children
         will be created/destroyed as needed to reach the desired state.
     choices: ['present', 'absent']
@@ -54,22 +58,38 @@ author: "Johan Wiren (@johanwiren)"
 
 EXAMPLES = '''
 # Create a new file system called myfs in pool rpool with the setuid property turned off
-- zfs: name=rpool/myfs state=present setuid=off
+- zfs:
+    name: rpool/myfs
+    state: present
+    setuid: off
 
 # Create a new volume called myvol in pool rpool.
-- zfs: name=rpool/myvol state=present volsize=10M
+- zfs:
+    name: rpool/myvol
+    state: present
+    volsize: 10M
 
 # Create a snapshot of rpool/myfs file system.
-- zfs: name=rpool/myfs@mysnapshot state=present
+- zfs:
+    name: rpool/myfs@mysnapshot
+    state: present
 
 # Create a new file system called myfs2 with snapdir enabled
-- zfs: name=rpool/myfs2 state=present snapdir=enabled
+- zfs:
+    name: rpool/myfs2
+    state: present
+    snapdir: enabled
 
 # Create a new file system by cloning a snapshot
-- zfs: name=rpool/cloned_fs state=present origin=rpool/myfs@mysnapshot
+- zfs:
+    name: rpool/cloned_fs
+    state: present
+    origin: rpool/myfs@mysnapshot
 
 # Destroy a filesystem
-- zfs: name=rpool/myfs state=absent
+- zfs:
+    name: rpool/myfs
+    state: absent
 '''
 
 
@@ -83,14 +103,27 @@ class Zfs(object):
         self.name = name
         self.properties = properties
         self.changed = False
-        self.is_solaris = os.uname()[0] == 'SunOS'
-        self.pool = name.split('/')[0]
         self.zfs_cmd = module.get_bin_path('zfs', True)
         self.zpool_cmd = module.get_bin_path('zpool', True)
+        self.pool = name.split('/')[0]
+        self.is_solaris = os.uname()[0] == 'SunOS'
+        self.is_openzfs = self.check_openzfs()
         self.enhanced_sharing = self.check_enhanced_sharing()
 
+    def check_openzfs(self):
+        cmd = [self.zpool_cmd]
+        cmd.extend(['get', 'version'])
+        cmd.append(self.pool)
+        (rc, out, err) = self.module.run_command(cmd, check_rc=True)
+        version = out.splitlines()[-1].split()[2]
+        if version == '-':
+            return True
+        if int(version) == 5000:
+            return True
+        return False
+
     def check_enhanced_sharing(self):
-        if os.uname()[0] == 'SunOS':
+        if self.is_solaris and not self.is_openzfs:
             cmd = [self.zpool_cmd]
             cmd.extend(['get', 'version'])
             cmd.append(self.pool)
@@ -185,8 +218,9 @@ class Zfs(object):
             if source == 'local':
                 properties[prop] = value
         # Add alias for enhanced sharing properties
-        properties['sharenfs'] = properties.get('share.nfs', None)
-        properties['sharesmb'] = properties.get('share.smb', None)
+        if self.enhanced_sharing:
+            properties['sharenfs'] = properties.get('share.nfs', None)
+            properties['sharesmb'] = properties.get('share.smb', None)
         return properties
 
 
@@ -212,7 +246,7 @@ def main():
         # All freestyle params are zfs properties
         if prop not in module.argument_spec:
             # Reverse the boolification of freestyle zfs properties
-            if type(value) == bool:
+            if isinstance(value, bool):
                 if value is True:
                     properties[prop] = 'on'
                 else:
@@ -242,4 +276,6 @@ def main():
 
 # import module snippets
 from ansible.module_utils.basic import *
-main()
+
+if __name__ == '__main__':
+    main()

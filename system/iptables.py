@@ -23,6 +23,10 @@ BINS = dict(
     ipv6='ip6tables',
 )
 
+ANSIBLE_METADATA = {'status': ['preview'],
+                    'supported_by': 'core',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 ---
 module: iptables
@@ -56,6 +60,14 @@ options:
     required: false
     default: present
     choices: [ "present", "absent" ]
+  action:
+    version_added: "2.2"
+    description:
+      - Whether the rule should be appended at the bottom or inserted at the
+        top. If the rule already exists the chain won't be modified.
+    required: false
+    default: append
+    choices: [ "append", "insert" ]
   ip_version:
     description:
       - Which version of the IP protocol this rule should apply to.
@@ -66,8 +78,8 @@ options:
     description:
       - "Chain to operate on. This option can either be the name of a user
         defined chain or any of the builtin chains: 'INPUT', 'FORWARD',
-        'OUTPUT', 'PREROUTING', 'POSTROUTING', 'SECMARK', 'CONNSECMARK'"
-    required: true
+        'OUTPUT', 'PREROUTING', 'POSTROUTING', 'SECMARK', 'CONNSECMARK'."
+    required: false
   protocol:
     description:
       - The protocol of the rule or of the packet to check. The specified
@@ -90,15 +102,7 @@ options:
         either a network mask or a plain number, specifying the number of 1's
         at the left side of the network mask. Thus, a mask of 24 is equivalent
         to 255.255.255.0. A "!" argument before the address specification
-        inverts the sense of the address.Source specification. Address can be
-        either a network name, a hostname, a network IP address (with /mask),
-        or a plain IP address.  Hostnames will be resolved once only, before
-        the rule is submitted to the kernel. Please note that specifying any
-        name to be resolved with a remote query such as DNS is a really bad
-        idea. The mask can be either a network mask or a plain number,
-        specifying the number of 1's at the left side of the network mask.
-        Thus, a mask of 24 is equivalent to 255.255.255.0. A "!" argument
-        before the address specification inverts the sense of the address.
+        inverts the sense of the address.
     required: false
     default: null
   destination:
@@ -111,15 +115,7 @@ options:
         either a network mask or a plain number, specifying the number of 1's
         at the left side of the network mask. Thus, a mask of 24 is equivalent
         to 255.255.255.0. A "!" argument before the address specification
-        inverts the sense of the address.Source specification. Address can be
-        either a network name, a hostname, a network IP address (with /mask),
-        or a plain IP address. Hostnames will be resolved once only, before
-        the rule is submitted to the kernel. Please note that specifying any
-        name to be resolved with a remote query such as DNS is a really bad
-        idea. The mask can be either a network mask or a plain number,
-        specifying the number of 1's at the left side of the network mask.
-        Thus, a mask of 24 is equivalent to 255.255.255.0. A "!" argument
-        before the address specification inverts the sense of the address.
+        inverts the sense of the address.
     required: false
     default: null
   match:
@@ -218,6 +214,13 @@ options:
         this, the destination address is never altered."
     required: false
     default: null
+  to_source:
+    version_added: "2.2"
+    description:
+      - "This specifies a source address to use with SNAT: without
+        this, the source address is never altered."
+    required: false
+    default: null
   set_dscp_mark:
     version_added: "2.1"
     description:
@@ -241,13 +244,18 @@ options:
     default: null
   ctstate:
     description:
-      - "ctstate is a list of the connection states to match in the conntrack module.
-        Possible states are: 'INVALID', 'NEW', 'ESTABLISHED', 'RELATED', 'UNTRACKED', 'SNAT', 'DNAT'"
+      - "ctstate is a list of the connection states to match in the conntrack
+        module.
+        Possible states are: 'INVALID', 'NEW', 'ESTABLISHED', 'RELATED',
+        'UNTRACKED', 'SNAT', 'DNAT'"
     required: false
     default: []
   limit:
     description:
-      - "Specifies the maximum average number of matches to allow per second. The number can specify units explicitly, using `/second', `/minute', `/hour' or `/day', or parts of them (so `5/second' is the same as `5/s')."
+      - "Specifies the maximum average number of matches to allow per second.
+        The number can specify units explicitly, using `/second', `/minute',
+        `/hour' or `/day', or parts of them (so `5/second' is the same as
+        `5/s')."
     required: false
     default: null
   limit_burst:
@@ -266,28 +274,73 @@ options:
     description:
       - "Specifies the error packet type to return while rejecting."
     required: false
+  icmp_type:
+    version_added: "2.2"
+    description:
+      - "This allows specification of the ICMP type, which can be a numeric
+        ICMP type, type/code pair, or one of the ICMP type names shown by the
+        command 'iptables -p icmp -h'"
+    required: false
+  flush:
+    version_added: "2.2"
+    description:
+      - "Flushes the specified table and chain of all rules. If no chain is
+        specified then the entire table is purged. Ignores all other
+        parameters."
+    required: false
+  policy:
+    version_added: "2.2"
+    description:
+      - "Set the policy for the chain to the given target. Valid targets are
+        ACCEPT, DROP, QUEUE, RETURN. Only built in chains can have policies.
+        This parameter requires the chain parameter. Ignores all other
+        parameters."
 '''
 
 EXAMPLES = '''
 # Block specific IP
-- iptables: chain=INPUT source=8.8.8.8 jump=DROP
+- iptables:
+    chain: INPUT
+    source: 8.8.8.8
+    jump: DROP
   become: yes
 
 # Forward port 80 to 8600
-- iptables: table=nat chain=PREROUTING in_interface=eth0 protocol=tcp match=tcp destination_port=80 jump=REDIRECT to_ports=8600 comment="Redirect web traffic to port 8600"
+- iptables:
+    table: nat
+    chain: PREROUTING
+    in_interface: eth0
+    protocol: tcp
+    match: tcp
+    destination_port: 80
+    jump: REDIRECT
+    to_ports: 8600
+    comment: Redirect web traffic to port 8600
   become: yes
 
 # Allow related and established connections
-- iptables: chain=INPUT ctstate=ESTABLISHED,RELATED jump=ACCEPT
+- iptables:
+    chain: INPUT
+    ctstate: ESTABLISHED,RELATED
+    jump: ACCEPT
   become: yes
 
 # Tag all outbound tcp packets with DSCP mark 8
-- iptables: chain=OUTPUT jump=DSCP table=mangle set_dscp_mark=8 protocol=tcp
+- iptables:
+    chain: OUTPUT
+    jump: DSCP
+    table: mangle
+    set_dscp_mark: 8
+    protocol: tcp
 
 # Tag all outbound tcp packets with DSCP DiffServ class CS1
-- iptables: chain=OUTPUT jump=DSCP table=mangle set_dscp_mark_class=CS1 protocol=tcp
+- iptables:
+    chain: OUTPUT
+    jump: DSCP
+    table: mangle
+    set_dscp_mark_class: CS1
+    protocol: tcp
 '''
-
 
 def append_param(rule, param, flag, is_list):
     if is_list:
@@ -321,6 +374,7 @@ def construct_rule(params):
     append_param(rule, params['match'], '-m', True)
     append_param(rule, params['jump'], '-j', False)
     append_param(rule, params['to_destination'], '--to-destination', False)
+    append_param(rule, params['to_source'], '--to-source', False)
     append_param(rule, params['goto'], '-g', False)
     append_param(rule, params['in_interface'], '-i', False)
     append_param(rule, params['out_interface'], '-o', False)
@@ -330,7 +384,11 @@ def construct_rule(params):
     append_param(rule, params['destination_port'], '--destination-port', False)
     append_param(rule, params['to_ports'], '--to-ports', False)
     append_param(rule, params['set_dscp_mark'], '--set-dscp', False)
-    append_param(rule, params['set_dscp_mark_class'], '--set-dscp-class', False)
+    append_param(
+        rule,
+        params['set_dscp_mark_class'],
+        '--set-dscp-class',
+        False)
     append_match(rule, params['comment'], 'comment')
     append_param(rule, params['comment'], '--comment', False)
     append_match(rule, params['ctstate'], 'state')
@@ -342,14 +400,16 @@ def construct_rule(params):
     append_param(rule, params['uid_owner'], '--uid-owner', False)
     append_jump(rule, params['reject_with'], 'REJECT')
     append_param(rule, params['reject_with'], '--reject-with', False)
+    append_param(rule, params['icmp_type'], '--icmp-type', False)
     return rule
 
 
-def push_arguments(iptables_path, action, params):
+def push_arguments(iptables_path, action, params, make_rule=True):
     cmd = [iptables_path]
     cmd.extend(['-t', params['table']])
     cmd.extend([action, params['chain']])
-    cmd.extend(construct_rule(params))
+    if make_rule:
+        cmd.extend(construct_rule(params))
     return cmd
 
 
@@ -364,8 +424,24 @@ def append_rule(iptables_path, module, params):
     module.run_command(cmd, check_rc=True)
 
 
+def insert_rule(iptables_path, module, params):
+    cmd = push_arguments(iptables_path, '-I', params)
+    module.run_command(cmd, check_rc=True)
+
+
 def remove_rule(iptables_path, module, params):
     cmd = push_arguments(iptables_path, '-D', params)
+    module.run_command(cmd, check_rc=True)
+
+
+def flush_table(iptables_path, module, params):
+    cmd = push_arguments(iptables_path, '-F', params, make_rule=False)
+    module.run_command(cmd, check_rc=True)
+
+
+def set_chain_policy(iptables_path, module, params):
+    cmd = push_arguments(iptables_path, '-P', params, make_rule=False)
+    cmd.append(params['policy'])
     module.run_command(cmd, check_rc=True)
 
 
@@ -373,12 +449,27 @@ def main():
     module = AnsibleModule(
         supports_check_mode=True,
         argument_spec=dict(
-            table=dict(required=False, default='filter', choices=['filter', 'nat', 'mangle', 'raw', 'security']),
-            state=dict(required=False, default='present', choices=['present', 'absent']),
-            ip_version=dict(required=False, default='ipv4', choices=['ipv4', 'ipv6']),
-            chain=dict(required=True, default=None, type='str'),
+            table=dict(
+                required=False,
+                default='filter',
+                choices=['filter', 'nat', 'mangle', 'raw', 'security']),
+            state=dict(
+                required=False,
+                default='present',
+                choices=['present', 'absent']),
+            action=dict(
+                required=False,
+                default='append',
+                type='str',
+                choices=['append', 'insert']),
+            ip_version=dict(
+                required=False,
+                default='ipv4',
+                choices=['ipv4', 'ipv6']),
+            chain=dict(required=False, default=None, type='str'),
             protocol=dict(required=False, default=None, type='str'),
             source=dict(required=False, default=None, type='str'),
+            to_source=dict(required=False, default=None, type='str'),
             destination=dict(required=False, default=None, type='str'),
             to_destination=dict(required=False, default=None, type='str'),
             match=dict(required=False, default=[], type='list'),
@@ -391,17 +482,25 @@ def main():
             source_port=dict(required=False, default=None, type='str'),
             destination_port=dict(required=False, default=None, type='str'),
             to_ports=dict(required=False, default=None, type='str'),
-            set_dscp_mark=dict(required=False,default=None, type='str'),
-            set_dscp_mark_class=dict(required=False,default=None, type='str'),
+            set_dscp_mark=dict(required=False, default=None, type='str'),
+            set_dscp_mark_class=dict(required=False, default=None, type='str'),
             comment=dict(required=False, default=None, type='str'),
             ctstate=dict(required=False, default=[], type='list'),
             limit=dict(required=False, default=None, type='str'),
             limit_burst=dict(required=False, default=None, type='str'),
             uid_owner=dict(required=False, default=None, type='str'),
             reject_with=dict(required=False, default=None, type='str'),
+            icmp_type=dict(required=False, default=None, type='str'),
+            flush=dict(required=False, default=False, type='bool'),
+            policy=dict(
+                required=False,
+                default=None,
+                type='str',
+                choices=['ACCEPT', 'DROP', 'QUEUE', 'RETURN']),
         ),
         mutually_exclusive=(
             ['set_dscp_mark', 'set_dscp_mark_class'],
+            ['flush', 'policy'],
         ),
     )
     args = dict(
@@ -410,11 +509,30 @@ def main():
         ip_version=module.params['ip_version'],
         table=module.params['table'],
         chain=module.params['chain'],
+        flush=module.params['flush'],
         rule=' '.join(construct_rule(module.params)),
         state=module.params['state'],
     )
+
     ip_version = module.params['ip_version']
     iptables_path = module.get_bin_path(BINS[ip_version], True)
+
+    # Check if chain option is required
+    if args['flush'] is False and args['chain'] is None:
+        module.fail_json(
+            msg="Either chain or flush parameter must be specified.")
+
+    # Flush the table
+    if args['flush'] is True:
+        flush_table(iptables_path, module, module.params)
+        module.exit_json(**args)
+
+    # Set the policy
+    if module.params['policy']:
+        set_chain_policy(iptables_path, module, module.params)
+        module.exit_json(**args)
+
+    insert = (module.params['action'] == 'insert')
     rule_is_present = check_present(iptables_path, module, module.params)
     should_be_present = (args['state'] == 'present')
 
@@ -426,11 +544,14 @@ def main():
         module.exit_json(changed=args['changed'])
 
     # Target is already up to date
-    if args['changed'] == False:
+    if args['changed'] is False:
         module.exit_json(**args)
 
     if should_be_present:
-        append_rule(iptables_path, module, module.params)
+        if insert:
+            insert_rule(iptables_path, module, module.params)
+        else:
+            append_rule(iptables_path, module, module.params)
     else:
         remove_rule(iptables_path, module, module.params)
 

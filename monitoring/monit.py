@@ -20,6 +20,10 @@
 #
 import time
 
+ANSIBLE_METADATA = {'status': ['preview'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 ---
 module: monit
@@ -53,7 +57,9 @@ author: "Darryl Stoflet (@dstoflet)"
 
 EXAMPLES = '''
 # Manage the state of program "httpd" to be in "started" state.
-- monit: name=httpd state=started
+- monit:
+    name: httpd
+    state: started
 '''
 
 def main():
@@ -127,9 +133,8 @@ def main():
                 module.exit_json(changed=True)
             status = run_command('reload')
             if status == '':
-                module.fail_json(msg='%s process not configured with monit' % name, name=name, state=state)
-            else:
-                module.exit_json(changed=True, name=name, state=state)
+                wait_for_monit_to_stop_pending()
+            module.exit_json(changed=True, name=name, state=state)
         module.exit_json(changed=False, name=name, state=state)
 
     wait_for_monit_to_stop_pending()
@@ -183,4 +188,5 @@ def main():
 # import module snippets
 from ansible.module_utils.basic import *
 
-main()
+if __name__ == '__main__':
+    main()

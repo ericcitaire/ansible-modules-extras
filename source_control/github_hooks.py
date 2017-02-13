@@ -29,6 +29,10 @@ except ImportError:
 
 import base64
 
+ANSIBLE_METADATA = {'status': ['preview'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 ---
 module: github_hooks
@@ -57,7 +61,7 @@ options:
     description:
       - This tells the githooks module what you want it to do.
     required: true
-    choices: [ "create", "cleanall" ]
+    choices: [ "create", "cleanall", "list", "clean504" ]
   validate_certs:
     description:
       - If C(no), SSL certificates for the target repo will not be validated. This should only be used
@@ -77,10 +81,20 @@ author: "Phillip Gentry, CX Inc (@pcgentry)"
 
 EXAMPLES = '''
 # Example creating a new service hook. It ignores duplicates.
-- github_hooks: action=create hookurl=http://11.111.111.111:2222 user={{ gituser }} oauthkey={{ oauthkey }} repo=https://api.github.com/repos/pcgentry/Github-Auto-Deploy
+- github_hooks:
+    action: create
+    hookurl: 'http://11.111.111.111:2222'
+    user: '{{ gituser }}'
+    oauthkey: '{{ oauthkey }}'
+    repo: 'https://api.github.com/repos/pcgentry/Github-Auto-Deploy'
 
 # Cleaning all hooks for this repo that had an error on the last update. Since this works for all hooks in a repo it is probably best that this would be called from a handler.
-- local_action: github_hooks action=cleanall user={{ gituser }} oauthkey={{ oauthkey }} repo={{ repo }}
+- github_hooks:
+    action: cleanall
+    user: '{{ gituser }}'
+    oauthkey: '{{ oauthkey }}'
+    repo: '{{ repo }}'
+  delegate_to: localhost
 '''
 
 def _list(module, hookurl, oauthkey, repo, user):
@@ -152,9 +166,9 @@ def _delete(module, hookurl, oauthkey, repo, user, hookid):
 def main():
     module = AnsibleModule(
         argument_spec=dict(
-        action=dict(required=True),
+        action=dict(required=True, choices=['list','clean504','cleanall','create']),
         hookurl=dict(required=False),
-        oauthkey=dict(required=True),
+        oauthkey=dict(required=True, no_log=True),
         repo=dict(required=True),
         user=dict(required=True),
         validate_certs=dict(default='yes', type='bool'),
@@ -191,4 +205,5 @@ def main():
 from ansible.module_utils.basic import *
 from ansible.module_utils.urls import *
 
-main()
+if __name__ == '__main__':
+    main()

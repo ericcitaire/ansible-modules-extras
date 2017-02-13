@@ -19,16 +19,20 @@
 # along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
 #
 
+ANSIBLE_METADATA = {'status': ['preview'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 ---
 module: rabbitmq_queue
-author: "Manuel Sousa (@manuel-sousa)" 
+author: "Manuel Sousa (@manuel-sousa)"
 version_added: "2.0"
 
 short_description: This module manages rabbitMQ queues
 description:
   - This module uses rabbitMQ Rest API to create/delete queues
-requirements: [ python requests ]
+requirements: [ "requests >= 1.0.0" ]
 options:
     name:
         description:
@@ -114,10 +118,15 @@ options:
 
 EXAMPLES = '''
 # Create a queue
-- rabbitmq_queue: name=myQueue
+- rabbitmq_queue:
+    name: myQueue
 
 # Create a queue on remote host
-- rabbitmq_queue: name=myRemoteQueue login_user=user login_password=secret login_host=remote.example.org
+- rabbitmq_queue:
+    name: myRemoteQueue
+    login_user: user
+    login_password: secret
+    login_host: remote.example.org
 '''
 
 import requests
@@ -152,7 +161,7 @@ def main():
         urllib.quote(module.params['vhost'],''),
         module.params['name']
     )
-    
+
     # Check if queue already exists
     r = requests.get( url, auth=(module.params['login_user'],module.params['login_password']))
 
@@ -260,4 +269,6 @@ def main():
 
 # import module snippets
 from ansible.module_utils.basic import *
-main()
+
+if __name__ == '__main__':
+    main()

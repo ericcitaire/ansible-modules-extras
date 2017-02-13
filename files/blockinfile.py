@@ -18,6 +18,10 @@
 # You should have received a copy of the GNU General Public License
 # along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
 
+ANSIBLE_METADATA = {'status': ['preview'],
+                    'supported_by': 'core',
+                    'version': '1.0'}
+
 DOCUMENTATION = """
 ---
 module: blockinfile
@@ -116,7 +120,7 @@ EXAMPLES = r"""
     dest: /etc/network/interfaces
     block: |
       iface eth0 inet static
-          address 192.168.0.1
+          address 192.0.2.23
           netmask 255.255.255.0
 
 - name: insert/update HTML surrounded by custom markers after <body> line
@@ -134,24 +138,24 @@ EXAMPLES = r"""
     marker: "<!-- {mark} ANSIBLE MANAGED BLOCK -->"
     content: ""
 
-- name: insert/update "Match User" configuation block in /etc/ssh/sshd_config
+- name: Add mappings to /etc/hosts
   blockinfile:
     dest: /etc/hosts
     block: |
-      {{item.name}} {{item.ip}}
+      {{item.ip}} {{item.name}}
     marker: "# {mark} ANSIBLE MANAGED BLOCK {{item.name}}"
   with_items:
-      - { name: host1, ip: 10.10.1.10 }
-      - { name: host2, ip: 10.10.1.11 }
-      - { name: host3, ip: 10.10.1.12 }
+    - { name: host1, ip: 10.10.1.10 }
+    - { name: host2, ip: 10.10.1.11 }
+    - { name: host3, ip: 10.10.1.12 }
 """
 
 import re
 import os
 import tempfile
-
-from ansible import __version__
-
+from ansible.module_utils.six import b
+from ansible.module_utils.basic import AnsibleModule
+from ansible.module_utils._text import to_bytes
 
 def write_changes(module, contents, dest):
 
@@ -171,7 +175,7 @@ def write_changes(module, contents, dest):
             module.fail_json(msg='failed to validate: '
                                  'rc:%s error:%s' % (rc, err))
     if valid:
-        module.atomic_move(tmpfile, dest)
+        module.atomic_move(tmpfile, dest, unsafe_writes=module.params['unsafe_writes'])
 
 
 def check_file_attrs(module, changed, message):
@@ -190,7 +194,7 @@ def check_file_attrs(module, changed, message):
 def main():
     module = AnsibleModule(
         argument_spec=dict(
-            dest=dict(required=True, aliases=['name', 'destfile']),
+            dest=dict(required=True, aliases=['name', 'destfile'], type='path'),
             state=dict(default='present', choices=['absent', 'present']),
             marker=dict(default='# {mark} ANSIBLE MANAGED BLOCK', type='str'),
             block=dict(default='', type='str', aliases=['content']),
@@ -206,7 +210,7 @@ def main():
     )
 
     params = module.params
-    dest = os.path.expanduser(params['dest'])
+    dest = params['dest']
     if module.boolean(params.get('follow', None)):
         dest = os.path.realpath(dest)
 
@@ -214,7 +218,8 @@ def main():
         module.fail_json(rc=256,
                          msg='Destination %s is a directory !' % dest)
 
-    if not os.path.exists(dest):
+    path_exists = os.path.exists(dest)
+    if not path_exists:
         if not module.boolean(params['create']):
             module.fail_json(rc=257,
                              msg='Destination %s does not exist !' % dest)
@@ -228,9 +233,12 @@ def main():
 
     insertbefore = params['insertbefore']
     insertafter = params['insertafter']
-    block = params['block']
-    marker = params['marker']
+    block = to_bytes(params['block'])
+    marker = to_bytes(params['marker'])
     present = params['state'] == 'present'
+
+    if not present and not path_exists:
+        module.exit_json(changed=False, msg="File not present")
 
     if insertbefore is None and insertafter is None:
         insertafter = 'EOF'
@@ -242,11 +250,11 @@ def main():
     else:
         insertre = None
 
-    marker0 = re.sub(r'{mark}', 'BEGIN', marker)
-    marker1 = re.sub(r'{mark}', 'END', marker)
+    marker0 = re.sub(b(r'{mark}'), b('BEGIN'), marker)
+    marker1 = re.sub(b(r'{mark}'), b('END'), marker)
     if present and block:
         # Escape seqeuences like '\n' need to be handled in Ansible 1.x
-        if __version__.startswith('1.'):
+        if module.ansible_version.startswith('1.'):
             block = re.sub('', block, '')
         blocklines = [marker0] + block.splitlines() + [marker1]
     else:
@@ -254,9 +262,9 @@ def main():
 
     n0 = n1 = None
     for i, line in enumerate(lines):
-        if line.startswith(marker0):
+        if line == marker0:
             n0 = i
-        if line.startswith(marker1):
+        if line == marker1:
             n1 = i
 
     if None in (n0, n1):
@@ -282,7 +290,9 @@ def main():
     lines[n0:n0] = blocklines
 
     if lines:
-        result = '\n'.join(lines)+'\n'
+        result = b('\n').join(lines)
+        if original is None or original.endswith(b('\n')):
+            result += b('\n')
     else:
         result = ''
     if original == result:
@@ -299,15 +309,16 @@ def main():
         changed = True
 
     if changed and not module.check_mode:
-        if module.boolean(params['backup']) and os.path.exists(dest):
+        if module.boolean(params['backup']) and path_exists:
             module.backup_local(dest)
         write_changes(module, result, dest)
+
+    if module.check_mode and not path_exists:
+        module.exit_json(changed=changed, msg=msg)
 
     msg, changed = check_file_attrs(module, changed, msg)
     module.exit_json(changed=changed, msg=msg)
 
-# import module snippets
-from ansible.module_utils.basic import *
-from ansible.module_utils.splitter import *
+
 if __name__ == '__main__':
     main()

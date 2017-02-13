@@ -19,6 +19,10 @@
 # along with Ansible.  If not, see <http://www.gnu.org/licenses/>
 #
 
+ANSIBLE_METADATA = {'status': ['preview'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 module: clc_firewall_policy
 short_description: Create/delete/update firewall policies
@@ -126,15 +130,10 @@ EXAMPLES = '''
         source_account_alias: WFAD
         location: VA1
         state: absent
-        firewall_policy_id: 'c62105233d7a4231bd2e91b9c791e43e1'
+        firewall_policy_id: c62105233d7a4231bd2e91b9c791e43e1
 '''
 
 RETURN = '''
-changed:
-    description: A flag indicating if any change was made or not
-    returned: success
-    type: boolean
-    sample: True
 firewall_policy_id:
     description: The fire wall policy id
     returned: success

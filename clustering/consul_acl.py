@@ -17,6 +17,10 @@
 # You should have received a copy of the GNU General Public License
 # along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
 
+ANSIBLE_METADATA = {'status': ['preview'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = """
 module: consul_acl
 short_description: "manipulate consul acl keys and rules"
@@ -37,14 +41,16 @@ options:
           - a management token is required to manipulate the acl lists
     state:
         description:
-          - whether the ACL pair should be present or absent, defaults to present
+          - whether the ACL pair should be present or absent
         required: false
         choices: ['present', 'absent']
-    type:
+        default: present
+    token_type:
         description:
           - the type of token that should be created, either management or
-            client, defaults to client
+            client
         choices: ['client', 'management']
+        default: client
     name:
         description:
           - the name that should be associated with the acl key, this is opaque
@@ -122,7 +128,7 @@ try:
     import consul
     from requests.exceptions import ConnectionError
     python_consul_installed = True
-except ImportError, e:
+except ImportError:
     python_consul_installed = False
 
 try:
@@ -178,11 +184,11 @@ def update_acl(module):
                 token = consul.acl.create(
                     name=name, type=token_type, rules=rules)
                 changed = True
-            except Exception, e:
+            except Exception as e:
                 module.fail_json(
                     msg="No token returned, check your managment key and that \
                          the host is in the acl datacenter %s" % e)
-    except Exception, e:
+    except Exception as e:
         module.fail_json(msg="Could not create/update acl %s" % e)
 
     module.exit_json(changed=changed,
@@ -214,7 +220,7 @@ def load_rules_for_token(module, consul_api, token):
                 for pattern, policy in rule_set[rule_type].iteritems():
                     rules.add_rule(rule_type, Rule(pattern, policy['policy']))
         return rules
-    except Exception, e:
+    except Exception as e:
         module.fail_json(
             msg="Could not load rule list from retrieved rule data %s, %s" % (
                     token, e))
@@ -234,8 +240,12 @@ def yml_to_rules(module, yml_rules):
                 rules.add_rule('key', Rule(rule['key'], rule['policy']))
             elif ('service' in rule and 'policy' in rule):
                 rules.add_rule('service', Rule(rule['service'], rule['policy']))
+            elif ('event' in rule and 'policy' in rule):
+                rules.add_rule('event', Rule(rule['event'], rule['policy']))
+            elif ('query' in rule and 'policy' in rule):
+                rules.add_rule('query', Rule(rule['query'], rule['policy']))
             else:
-                module.fail_json(msg="a rule requires a key/service and a policy.")
+                module.fail_json(msg="a rule requires a key/service/event or query and a policy.")
     return rules
 
 template = '''%s "%s" {
@@ -243,7 +253,7 @@ template = '''%s "%s" {
 }
 '''
 
-RULE_TYPES = ['key', 'service']
+RULE_TYPES = ['key', 'service', 'event', 'query']
 
 class Rules:
 
@@ -313,7 +323,7 @@ def get_consul_api(module, token=None):
     return consul.Consul(host=module.params.get('host'),
                          port=module.params.get('port'),
                          scheme=module.params.get('scheme'),
-                         validate_certs=module.params.get('validate_certs'),
+                         verify=module.params.get('validate_certs'),
                          token=token)
 
 def test_dependencies(module):
@@ -330,7 +340,7 @@ def main():
         mgmt_token=dict(required=True, no_log=True),
         host=dict(default='localhost'),
         scheme=dict(required=False, default='http'),
-        validate_certs=dict(required=False, default=True),
+        validate_certs=dict(required=False, type='bool', default=True),
         name=dict(required=False),
         port=dict(default=8500, type='int'),
         rules=dict(default=None, required=False, type='list'),
@@ -345,10 +355,10 @@ def main():
 
     try:
         execute(module)
-    except ConnectionError, e:
+    except ConnectionError as e:
         module.fail_json(msg='Could not connect to consul agent at %s:%s, error was %s' % (
                             module.params.get('host'), module.params.get('port'), str(e)))
-    except Exception, e:
+    except Exception as e:
         module.fail_json(msg=str(e))
 
 # import module snippets

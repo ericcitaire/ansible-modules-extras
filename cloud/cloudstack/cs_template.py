@@ -18,6 +18,10 @@
 # You should have received a copy of the GNU General Public License
 # along with Ansible. If not, see <http://www.gnu.org/licenses/>.
 
+ANSIBLE_METADATA = {'status': ['stableinterface'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 ---
 module: cs_template
@@ -89,10 +93,27 @@ options:
     default: false
   cross_zones:
     description:
-      - Whether the template should be syned or removed across zones.
+      - Whether the template should be synced or removed across zones.
       - Only used if C(state) is present or absent.
     required: false
     default: false
+  mode:
+    description:
+      - Mode for the template extraction.
+      - Only used if C(state=extracted).
+    required: false
+    default: 'http_download'
+    choices: [ 'http_download', 'ftp_upload' ]
+  domain:
+    description:
+      - Domain the template, snapshot or VM is related to.
+    required: false
+    default: null
+  account:
+    description:
+      - Account the template, snapshot or VM is related to.
+    required: false
+    default: null
   project:
     description:
       - Name of the project the template to be registered in.
@@ -115,7 +136,7 @@ options:
       - Name the hypervisor to be used for creating the new template.
       - Relevant when using C(state=present).
     required: false
-    default: none
+    default: null
     choices: [ 'KVM', 'VMware', 'BareMetal', 'XenServer', 'LXC', 'HyperV', 'UCS', 'OVM' ]
   requires_hvm:
     description:
@@ -358,12 +379,6 @@ project:
   sample: Production
 '''
 
-try:
-    from cs import CloudStack, CloudStackException, read_config
-    has_lib_cs = True
-except ImportError:
-    has_lib_cs = False
-
 # import cloudstack common
 from ansible.module_utils.cloudstack import *
 
@@ -465,7 +480,7 @@ class AnsibleCloudStackTemplate(AnsibleCloudStack):
 
                 poll_async = self.module.params.get('poll_async')
                 if poll_async:
-                    template = self._poll_job(template, 'template')
+                    template = self.poll_job(template, 'template')
         return template
 
 
@@ -553,7 +568,7 @@ class AnsibleCloudStackTemplate(AnsibleCloudStack):
 
             poll_async = self.module.params.get('poll_async')
             if poll_async:
-                template = self._poll_job(template, 'template')
+                template = self.poll_job(template, 'template')
         return template
 
 
@@ -576,7 +591,7 @@ class AnsibleCloudStackTemplate(AnsibleCloudStack):
 
                 poll_async = self.module.params.get('poll_async')
                 if poll_async:
-                    res = self._poll_job(res, 'template')
+                    res = self.poll_job(res, 'template')
         return template
 
 
@@ -625,9 +640,6 @@ def main():
         ),
         supports_check_mode=True
     )
-
-    if not has_lib_cs:
-        module.fail_json(msg="python library cs required: pip install cs")
 
     try:
         acs_tpl = AnsibleCloudStackTemplate(module)

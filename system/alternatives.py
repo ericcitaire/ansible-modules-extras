@@ -22,6 +22,10 @@ You should have received a copy of the GNU General Public License
 along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
 """
 
+ANSIBLE_METADATA = {'status': ['preview'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 ---
 module: alternatives
@@ -47,20 +51,38 @@ options:
       - The path to the symbolic link that should point to the real executable.
       - This option is required on RHEL-based distributions
     required: false
+  priority:
+    description:
+      - The priority of the alternative
+    required: false
+    default: 50
+    version_added: "2.2"
 requirements: [ update-alternatives ]
 '''
 
 EXAMPLES = '''
 - name: correct java version selected
-  alternatives: name=java path=/usr/lib/jvm/java-7-openjdk-amd64/jre/bin/java
+  alternatives:
+    name: java
+    path: /usr/lib/jvm/java-7-openjdk-amd64/jre/bin/java
 
 - name: alternatives link created
-  alternatives: name=hadoop-conf link=/etc/hadoop/conf path=/etc/hadoop/conf.ansible
+  alternatives:
+    name: hadoop-conf
+    link: /etc/hadoop/conf
+    path: /etc/hadoop/conf.ansible
+
+- name: make java 32 bit an alternative with low priority
+  alternatives:
+    name: java
+    path: /usr/lib/jvm/java-7-openjdk-i386/jre/bin/java
+    priority: -10
 '''
 
-DEFAULT_LINK_PRIORITY = 50
-
 import re
+from ansible.module_utils.basic import *
+from ansible.module_utils.pycompat24 import get_exception
+
 
 def main():
 
@@ -69,6 +91,8 @@ def main():
             name = dict(required=True),
             path = dict(required=True, type='path'),
             link = dict(required=False, type='path'),
+            priority = dict(required=False, type='int',
+                            default=50),
         ),
         supports_check_mode=True,
     )
@@ -77,6 +101,7 @@ def main():
     name = params['name']
     path = params['path']
     link = params['link']
+    priority = params['priority']
 
     UPDATE_ALTERNATIVES = module.get_bin_path('update-alternatives',True)
 
@@ -124,7 +149,7 @@ def main():
                     module.fail_json(msg="Needed to install the alternative, but unable to do so as we are missing the link")
 
                 module.run_command(
-                    [UPDATE_ALTERNATIVES, '--install', link, name, path, str(DEFAULT_LINK_PRIORITY)],
+                    [UPDATE_ALTERNATIVES, '--install', link, name, path, str(priority)],
                     check_rc=True
                 )
 
@@ -135,12 +160,11 @@ def main():
             )
 
             module.exit_json(changed=True)
-        except subprocess.CalledProcessError, cpe:
+        except subprocess.CalledProcessError:
+            e = get_exception()
             module.fail_json(msg=str(dir(cpe)))
     else:
         module.exit_json(changed=False)
 
-
-# import module snippets
-from ansible.module_utils.basic import *
-main()
+if __name__ == '__main__':
+    main()

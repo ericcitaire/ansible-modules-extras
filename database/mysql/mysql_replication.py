@@ -22,6 +22,10 @@ You should have received a copy of the GNU General Public License
 along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
 """
 
+ANSIBLE_METADATA = {'status': ['preview'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 ---
 module: mysql_replication
@@ -103,16 +107,25 @@ extends_documentation_fragment: mysql
 
 EXAMPLES = '''
 # Stop mysql slave thread
-- mysql_replication: mode=stopslave
+- mysql_replication:
+    mode: stopslave
 
 # Get master binlog file name and binlog position
-- mysql_replication: mode=getmaster
+- mysql_replication:
+    mode: getmaster
 
-# Change master to master server 192.168.1.1 and use binary log 'mysql-bin.000009' with position 4578
-- mysql_replication: mode=changemaster master_host=192.168.1.1 master_log_file=mysql-bin.000009 master_log_pos=4578
+# Change master to master server 192.0.2.1 and use binary log 'mysql-bin.000009' with position 4578
+- mysql_replication:
+    mode: changemaster
+    master_host: 192.0.2.1
+    master_log_file: mysql-bin.000009
+    master_log_pos: 4578
 
 # Check slave status using port 3308
-- mysql_replication: mode=getslave login_host=ansible.example.com login_port=3308
+- mysql_replication:
+    mode: getslave
+    login_host: ansible.example.com
+    login_port: 3308
 '''
 
 import os
@@ -124,6 +137,10 @@ except ImportError:
     mysqldb_found = False
 else:
     mysqldb_found = True
+
+from ansible.module_utils.basic import AnsibleModule
+from ansible.module_utils.mysql import mysql_connect
+from ansible.module_utils.pycompat24 import get_exception
 
 
 def get_master_status(cursor):
@@ -184,7 +201,7 @@ def main():
     module = AnsibleModule(
             argument_spec = dict(
             login_user=dict(default=None),
-            login_password=dict(default=None),
+            login_password=dict(default=None, no_log=True),
             login_host=dict(default="localhost"),
             login_port=dict(default=3306, type='int'),
             login_unix_socket=dict(default=None),
@@ -192,7 +209,7 @@ def main():
             master_auto_position=dict(default=False, type='bool'),
             master_host=dict(default=None),
             master_user=dict(default=None),
-            master_password=dict(default=None),
+            master_password=dict(default=None, no_log=True),
             master_port=dict(default=None, type='int'),
             master_connect_retry=dict(default=None, type='int'),
             master_log_file=dict(default=None),
@@ -206,16 +223,12 @@ def main():
             master_ssl_key=dict(default=None),
             master_ssl_cipher=dict(default=None),
             connect_timeout=dict(default=30, type='int'),
-            config_file=dict(default="~/.my.cnf"),
+            config_file=dict(default="~/.my.cnf", type='path'),
             ssl_cert=dict(default=None),
             ssl_key=dict(default=None),
             ssl_ca=dict(default=None),
         )
     )
-    user = module.params["login_user"]
-    password = module.params["login_password"]
-    host = module.params["login_host"]
-    port = module.params["login_port"]
     mode = module.params["mode"]
     master_host = module.params["master_host"]
     master_user = module.params["master_user"]
@@ -238,7 +251,6 @@ def main():
     ssl_ca = module.params["ssl_ca"]
     connect_timeout = module.params['connect_timeout']
     config_file = module.params['config_file']
-    config_file = os.path.expanduser(os.path.expandvars(config_file))
 
     if not mysqldb_found:
         module.fail_json(msg="the python mysqldb module is required")
@@ -251,29 +263,33 @@ def main():
     try:
         cursor = mysql_connect(module, login_user, login_password, config_file, ssl_cert, ssl_key, ssl_ca, None, 'MySQLdb.cursors.DictCursor',
                                connect_timeout=connect_timeout)
-    except Exception, e:
+    except Exception:
+        e = get_exception()
         if os.path.exists(config_file):
             module.fail_json(msg="unable to connect to database, check login_user and login_password are correct or %s has the credentials. Exception message: %s" % (config_file, e))
         else:
             module.fail_json(msg="unable to find %s. Exception message: %s" % (config_file, e))
 
     if mode in "getmaster":
-        masterstatus = get_master_status(cursor)
-        try:
-            module.exit_json( **masterstatus )
-        except TypeError:
-            module.fail_json(msg="Server is not configured as mysql master")
+        status = get_master_status(cursor)
+        if not isinstance(status, dict):
+            status = dict(Is_Master=False, msg="Server is not configured as mysql master")
+        else:
+            status['Is_Master'] = True
+        module.exit_json(**status)
 
     elif mode in "getslave":
-        slavestatus = get_slave_status(cursor)
-        try:
-            module.exit_json( **slavestatus )
-        except TypeError, e:
-            module.fail_json(msg="Server is not configured as mysql slave. ERROR: %s" % e)
+        status = get_slave_status(cursor)
+        if not isinstance(status, dict):
+            status = dict(Is_Slave=False, msg="Server is not configured as mysql slave")
+        else:
+            status['Is_Slave'] = True
+        module.exit_json(**status)
 
     elif mode in "changemaster":
         chm=[]
         chm_params = {}
+        result = {}
         if master_host:
             chm.append("MASTER_HOST=%(master_host)s")
             chm_params['master_host'] = master_host
@@ -322,9 +338,14 @@ def main():
             chm.append("MASTER_AUTO_POSITION = 1")
         try:
             changemaster(cursor, chm, chm_params)
-        except Exception, e:
+        except MySQLdb.Warning:
+            e = get_exception()
+            result['warning'] = str(e)
+        except Exception:
+            e = get_exception()
             module.fail_json(msg='%s. Query == CHANGE MASTER TO %s' % (e, chm))
-        module.exit_json(changed=True)
+        result['changed']=True
+        module.exit_json(**result)
     elif mode in "startslave":
         started = start_slave(cursor)
         if started is True:
@@ -350,8 +371,7 @@ def main():
         else:
             module.exit_json(msg="Slave already reset", changed=False)
 
-# import module snippets
-from ansible.module_utils.basic import *
-from ansible.module_utils.mysql import *
-main()
-warnings.simplefilter("ignore")
+
+if __name__ == '__main__':
+    main()
+    warnings.simplefilter("ignore")

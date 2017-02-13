@@ -18,6 +18,10 @@
 # You should have received a copy of the GNU General Public License
 # along with this software.  If not, see <http://www.gnu.org/licenses/>.
 
+ANSIBLE_METADATA = {'status': ['stableinterface'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 ---
 module: apk
@@ -42,7 +46,7 @@ options:
     choices: [ "present", "absent", "latest" ]
   update_cache:
     description:
-      - Update repository indexes. Can be run with other steps or on it's own. 
+      - Update repository indexes. Can be run with other steps or on it's own.
     required: false
     default: no
     choices: [ "yes", "no" ]
@@ -52,38 +56,60 @@ options:
     required: false
     default: no
     choices: [ "yes", "no" ]
+notes:
+  - '"name" and "upgrade" are mutually exclusive.'
 '''
 
 EXAMPLES = '''
 # Update repositories and install "foo" package
-- apk: name=foo update_cache=yes
+- apk:
+    name: foo
+    update_cache: yes
 
 # Update repositories and install "foo" and "bar" packages
-- apk: name=foo,bar update_cache=yes
+- apk:
+    name: foo,bar
+    update_cache: yes
 
 # Remove "foo" package
-- apk: name=foo state=absent
+- apk:
+    name: foo
+    state: absent
 
 # Remove "foo" and "bar" packages
-- apk: name=foo,bar state=absent
+- apk:
+    name: foo,bar
+    state: absent
 
 # Install the package "foo"
-- apk: name=foo state=present
+- apk:
+    name: foo
+    state: present
 
 # Install the packages "foo" and "bar"
-- apk: name=foo,bar state=present
+- apk:
+    name: foo,bar
+    state: present
 
 # Update repositories and update package "foo" to latest version
-- apk: name=foo state=latest update_cache=yes
+- apk:
+    name: foo
+    state: latest
+    update_cache: yes
 
 # Update repositories and update packages "foo" and "bar" to latest versions
-- apk: name=foo,bar state=latest update_cache=yes
+- apk:
+    name: foo,bar
+    state: latest
+    update_cache: yes
 
 # Update all installed packages to the latest versions
-- apk: upgrade=yes
+- apk:
+    upgrade: yes
 
 # Update repositories as a separate step
-- apk: update_cache=yes
+- apk:
+    update_cache: yes
 '''
 
 import os
@@ -114,6 +140,23 @@ def query_latest(module, name):
         return False
     return True
 
+def query_virtual(module, name):
+    cmd = "%s -v info --description %s" % (APK_PATH, name)
+    rc, stdout, stderr = module.run_command(cmd, check_rc=False)
+    search_pattern = "^%s: virtual meta package" % (name)
+    if re.search(search_pattern, stdout):
+        return True
+    return False
+
+def get_dependencies(module, name):
+    cmd = "%s -v info --depends %s" % (APK_PATH, name)
+    rc, stdout, stderr = module.run_command(cmd, check_rc=False)
+    dependencies = stdout.split()
+    if len(dependencies) > 1:
+        return dependencies[1:]
+    else:
+        return []
+
 def upgrade_packages(module):
     if module.check_mode:
         cmd = "%s upgrade --simulate" % (APK_PATH)
@@ -128,29 +171,40 @@ def upgrade_packages(module):
 
 def install_packages(module, names, state):
     upgrade = False
-    uninstalled = []
+    to_install = []
+    to_upgrade = []
     for name in names:
-        if not query_package(module, name):
-            uninstalled.append(name)
-        elif state == 'latest' and not query_latest(module, name):
-            upgrade = True
-    if not uninstalled and not upgrade:
+        # Check if virtual package
+        if query_virtual(module, name):
+            # Get virtual package dependencies
+            dependencies = get_dependencies(module, name)
+            for dependency in dependencies:
+                if state == 'latest' and not query_latest(module, dependency):
+                    to_upgrade.append(dependency)
+        else:
+            if not query_package(module, name):
+                to_install.append(name)
+            elif state == 'latest' and not query_latest(module, name):
+                to_upgrade.append(name)
+    if to_upgrade:
+        upgrade = True
+    if not to_install and not upgrade:
         module.exit_json(changed=False, msg="package(s) already installed")
-    names = " ".join(uninstalled)
+    packages = " ".join(to_install) + " ".join(to_upgrade)
     if upgrade:
         if module.check_mode:
-            cmd = "%s add --upgrade --simulate %s" % (APK_PATH, names)
+            cmd = "%s add --upgrade --simulate %s" % (APK_PATH, packages)
         else:
-            cmd = "%s add --upgrade %s" % (APK_PATH, names)
+            cmd = "%s add --upgrade %s" % (APK_PATH, packages)
     else:
         if module.check_mode:
-            cmd = "%s add --simulate %s" % (APK_PATH, names)
+            cmd = "%s add --simulate %s" % (APK_PATH, packages)
         else:
-            cmd = "%s add %s" % (APK_PATH, names)
+            cmd = "%s add %s" % (APK_PATH, packages)
     rc, stdout, stderr = module.run_command(cmd, check_rc=False)
     if rc != 0:
-        module.fail_json(msg="failed to install %s" % (names))
-    module.exit_json(changed=True, msg="installed %s package(s)" % (names))
+        module.fail_json(msg="failed to install %s" % (packages))
+    module.exit_json(changed=True, msg="installed %s package(s)" % (packages))
 
 def remove_packages(module, names):
     installed = []
@@ -168,7 +222,7 @@ def remove_packages(module, names):
     if rc != 0:
         module.fail_json(msg="failed to remove %s package(s)" % (names))
     module.exit_json(changed=True, msg="removed %s package(s)" % (names))
-        
+
 # ==========================================
 # Main control flow.
 
@@ -181,8 +235,12 @@ def main():
             upgrade = dict(default='no', type='bool'),
         ),
         required_one_of = [['name', 'update_cache', 'upgrade']],
+        mutually_exclusive = [['name', 'upgrade']],
         supports_check_mode = True
     )
+
+    # Set LANG env since we parse stdout
+    module.run_command_environ_update = dict(LANG='C', LC_ALL='C', LC_MESSAGES='C', LC_CTYPE='C')
 
     global APK_PATH
     APK_PATH = module.get_bin_path('apk', required=True)

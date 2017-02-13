@@ -21,6 +21,10 @@
 # along with this software.  If not, see <http://www.gnu.org/licenses/>.
 
 
+ANSIBLE_METADATA = {'status': ['preview'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 ---
 module: pkgng
@@ -32,49 +36,56 @@ version_added: "1.2"
 options:
     name:
         description:
-            - name of package to install/remove
+            - Name of package to install/remove.
         required: true
     state:
         description:
-            - state of the package
+            - State of the package.
         choices: [ 'present', 'absent' ]
         required: false
         default: present
     cached:
         description:
-            - use local package base or try to fetch an updated one
+            - Use local package base instead of fetching an updated one.
         choices: [ 'yes', 'no' ]
         required: false
         default: no
     annotation:
         description:
-            - a comma-separated list of keyvalue-pairs of the form
-              <+/-/:><key>[=<value>]. A '+' denotes adding an annotation, a
-              '-' denotes removing an annotation, and ':' denotes modifying an 
+            - A comma-separated list of keyvalue-pairs of the form
+              C(<+/-/:><key>[=<value>]). A C(+) denotes adding an annotation, a
+              C(-) denotes removing an annotation, and C(:) denotes modifying an
               annotation.
               If setting or modifying annotations, a value must be provided.
         required: false
         version_added: "1.6"
     pkgsite:
         description:
-            - for pkgng versions before 1.1.4, specify packagesite to use
-              for downloading packages, if not specified, use settings from
-              /usr/local/etc/pkg.conf
-              for newer pkgng versions, specify a the name of a repository
-              configured in /usr/local/etc/pkg/repos
+            - For pkgng versions before 1.1.4, specify packagesite to use
+              for downloading packages. If not specified, use settings from
+              C(/usr/local/etc/pkg.conf).
+            - For newer pkgng versions, specify a the name of a repository
+              configured in C(/usr/local/etc/pkg/repos).
         required: false
     rootdir:
         description:
-            - for pkgng versions 1.5 and later, pkg will install all packages
-              within the specified root directory
-            - can not be used together with 'chroot' option
+            - For pkgng versions 1.5 and later, pkg will install all packages
+              within the specified root directory.
+            - Can not be used together with I(chroot) option.
         required: false
     chroot:
         version_added: "2.1"
         description:
-            - pkg will chroot in the specified environment
-            - can not be used together with 'rootdir' option
+            - Pkg will chroot in the specified environment.
+            - Can not be used together with I(rootdir) option.
         required: false
+    autoremove:
+        version_added: "2.2"
+        description:
+            - Remove automatically installed packages which are no longer needed.
+        required: false
+        choices: [ "yes", "no" ]
+        default: no
 author: "bleader (@bleader)" 
 notes:
     - When using pkgsite, be careful that already in cache packages won't be downloaded again.
@@ -82,20 +93,24 @@ notes:
 
 EXAMPLES = '''
 # Install package foo
-- pkgng: name=foo state=present
+- pkgng:
+    name: foo
+    state: present
 
 # Annotate package foo and bar
-- pkgng: name=foo,bar annotation=+test1=baz,-test2,:test3=foobar
+- pkgng:
+    name: foo,bar
+    annotation: '+test1=baz,-test2,:test3=foobar'
 
 # Remove packages foo and bar 
-- pkgng: name=foo,bar state=absent
+- pkgng:
+    name: foo,bar
+    state: absent
 '''
 
 
-import shlex
-import os
 import re
-import sys
+from ansible.module_utils.basic import AnsibleModule
 
 def query_package(module, pkgng_path, name, dir_arg):
 
@@ -109,7 +124,7 @@ def query_package(module, pkgng_path, name, dir_arg):
 def pkgng_older_than(module, pkgng_path, compare_version):
 
     rc, out, err = module.run_command("%s -v" % pkgng_path)
-    version = map(lambda x: int(x), re.split(r'[\._]', out))
+    version = [int(x) for x in re.split(r'[\._]', out)]
 
     i = 0
     new_pkgng = True
@@ -124,7 +139,7 @@ def pkgng_older_than(module, pkgng_path, compare_version):
 
 
 def remove_packages(module, pkgng_path, packages, dir_arg):
-    
+
     remove_c = 0
     # Using a for loop incase of error, we can report the package that failed
     for package in packages:
@@ -137,7 +152,7 @@ def remove_packages(module, pkgng_path, packages, dir_arg):
 
         if not module.check_mode and query_package(module, pkgng_path, package, dir_arg):
             module.fail_json(msg="failed to remove %s: %s" % (package, out))
-    
+
         remove_c += 1
 
     if remove_c > 0:
@@ -185,7 +200,7 @@ def install_packages(module, pkgng_path, packages, cached, pkgsite, dir_arg):
             module.fail_json(msg="failed to install %s: %s" % (package, out), stderr=err)
 
         install_c += 1
-    
+
     if install_c > 0:
         return (True, "added %s package(s)" % (install_c))
 
@@ -270,6 +285,23 @@ def annotate_packages(module, pkgng_path, packages, annotation, dir_arg):
         return (True, "added %s annotations." % annotate_c)
     return (False, "changed no annotations")
 
+def autoremove_packages(module, pkgng_path, dir_arg):
+    rc, out, err = module.run_command("%s %s autoremove -n" % (pkgng_path, dir_arg))
+
+    autoremove_c = 0
+
+    match = re.search('^Deinstallation has been requested for the following ([0-9]+) packages', out, re.MULTILINE)
+    if match:
+        autoremove_c = int(match.group(1))
+
+    if autoremove_c == 0:
+        return False, "no package(s) to autoremove"
+
+    if not module.check_mode:
+        rc, out, err = module.run_command("%s %s autoremove -y" % (pkgng_path, dir_arg))
+
+    return True, "autoremoved %d package(s)" % (autoremove_c)
+
 def main():
     module = AnsibleModule(
             argument_spec       = dict(
@@ -279,7 +311,8 @@ def main():
                 annotation      = dict(default="", required=False),
                 pkgsite         = dict(default="", required=False),
                 rootdir         = dict(default="", required=False, type='path'),
-                chroot          = dict(default="", required=False, type='path')),
+                chroot          = dict(default="", required=False, type='path'),
+                autoremove      = dict(default=False, type='bool')),
             supports_check_mode = True,
             mutually_exclusive  =[["rootdir", "chroot"]])
 
@@ -301,7 +334,7 @@ def main():
             dir_arg = "--rootdir %s" % (p["rootdir"])
 
     if p["chroot"] != "":
-      dir_arg = '--chroot %s' % (p["chroot"])
+        dir_arg = '--chroot %s' % (p["chroot"])
 
     if p["state"] == "present":
         _changed, _msg = install_packages(module, pkgng_path, pkgs, p["cached"], p["pkgsite"], dir_arg)
@@ -313,6 +346,11 @@ def main():
         changed = changed or _changed
         msgs.append(_msg)
 
+    if p["autoremove"]:
+        _changed, _msg = autoremove_packages(module, pkgng_path, dir_arg)
+        changed = changed or _changed
+        msgs.append(_msg)
+
     if p["annotation"]:
         _changed, _msg = annotate_packages(module, pkgng_path, pkgs, p["annotation"], dir_arg)
         changed = changed or _changed
@@ -321,8 +359,5 @@ def main():
     module.exit_json(changed=changed, msg=", ".join(msgs))
 
 
-
-# import module snippets
-from ansible.module_utils.basic import *
-    
-main()        
+if __name__ == '__main__':
+    main()

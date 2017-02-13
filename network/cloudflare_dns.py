@@ -18,20 +18,16 @@
 # You should have received a copy of the GNU General Public License
 # along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
 
-try:
-    import json
-except ImportError:
-    try:
-        import simplejson as json
-    except ImportError:
-        # Let snippet from module_utils/basic.py return a proper error in this case
-        pass
-import urllib
+ANSIBLE_METADATA = {'status': ['preview'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
 
 DOCUMENTATION = '''
 ---
 module: cloudflare_dns
 author: "Michael Gruener (@mgruener)"
+requirements:
+   - "python >= 2.6"
 version_added: "2.1"
 short_description: manage Cloudflare DNS records
 description:
@@ -58,6 +54,11 @@ options:
     required: false
     choices: [ 'tcp', 'udp' ]
     default: null
+  proxied:
+    description: Proxy through cloudflare network or just use DNS
+    required: false
+    default: no
+    version_added: "2.3"
   record:
     description:
       - Record to add. Required if C(state=present). Default is C(@) (e.g. the zone name)
@@ -87,7 +88,7 @@ options:
     default: 30
   ttl:
     description:
-      - The TTL to give the new record. Min 1 (automatic), max 2147483647
+      - The TTL to give the new record. Must be between 120 and 2,147,483,647 seconds, or 1 for automatic.
     required: false
     default: 1 (automatic)
   type:
@@ -152,6 +153,16 @@ EXAMPLES = '''
     account_email: test@example.com
     account_api_token: dummyapitoken
 
+# create a my.com CNAME record to example.com and proxy through cloudflare's network
+- cloudflare_dns:
+    zone: my.com
+    type: CNAME
+    value: example.com
+    state: present
+    proxied: yes
+    account_email: test@example.com
+    account_api_token: dummyapitoken
+
 # create TXT record "test.my.com" with value "unique value"
 # delete all other TXT records named "test.my.com"
 - cloudflare_dns:
@@ -186,7 +197,7 @@ record:
             description: the record content (details depend on record type)
             returned: success
             type: string
-            sample: 192.168.100.20
+            sample: 192.0.2.91
         created_on:
             description: the record creation date
             returned: success
@@ -267,6 +278,22 @@ record:
             sample: sample.com
 '''
 
+try:
+    import json
+except ImportError:
+    try:
+        import simplejson as json
+    except ImportError:
+        # Let snippet from module_utils/basic.py return a proper error in this case
+        pass
+
+import urllib
+
+from ansible.module_utils.basic import AnsibleModule
+from ansible.module_utils.pycompat24 import get_exception
+from ansible.module_utils.urls import fetch_url
+
+
 class CloudflareAPI(object):
 
     cf_api_endpoint = 'https://api.cloudflare.com/client/v4'
@@ -279,6 +306,7 @@ class CloudflareAPI(object):
         self.port              = module.params['port']
         self.priority          = module.params['priority']
         self.proto             = module.params['proto']
+        self.proxied           = module.params['proxied']
         self.record            = module.params['record']
         self.service           = module.params['service']
         self.is_solo           = module.params['solo']
@@ -313,8 +341,9 @@ class CloudflareAPI(object):
         if payload:
             try:
                 data = json.dumps(payload)
-            except Exception, e:
-                self.module.fail_json(msg="Failed to encode payload as JSON: {0}".format(e))
+            except Exception:
+                e = get_exception()
+                self.module.fail_json(msg="Failed to encode payload as JSON: %s " % str(e))
 
         resp, info = fetch_url(self.module,
                                self.cf_api_endpoint + api_call,
@@ -349,11 +378,17 @@ class CloudflareAPI(object):
         result = None
         try:
             content = resp.read()
-            result = json.loads(content)
         except AttributeError:
-            error_msg += "; The API response was empty"
-        except json.JSONDecodeError:
-            error_msg += "; Failed to parse API response: {0}".format(content)
+            if info['body']:
+                content = info['body']
+            else:
+                error_msg += "; The API response was empty"
+
+        if content:
+            try:
+                result = json.loads(content)
+            except json.JSONDecodeError:
+                error_msg += "; Failed to parse API response: {0}".format(content)
 
         # received an error status but no data with details on what failed
         if  (info['status'] not in [200,304]) and (result is None):
@@ -478,7 +513,7 @@ class CloudflareAPI(object):
 
     def ensure_dns_record(self,**kwargs):
         params = {}
-        for param in ['port','priority','proto','service','ttl','type','record','value','weight','zone']:
+        for param in ['port','priority','proto','proxied','service','ttl','type','record','value','weight','zone']:
           if param in kwargs:
               params[param] = kwargs[param]
           else:
@@ -507,6 +542,9 @@ class CloudflareAPI(object):
                 "content": params['value'],
                 "ttl": params['ttl']
             }
+
+        if (params['type'] in [ 'A', 'AAAA', 'CNAME' ]):
+            new_record["proxied"] = params["proxied"]
 
         if params['type'] == 'MX':
             for attr in [params['priority'],params['value']]:
@@ -576,6 +614,7 @@ def main():
             port              = dict(required=False, default=None, type='int'),
             priority          = dict(required=False, default=1, type='int'),
             proto             = dict(required=False, default=None, choices=[ 'tcp', 'udp' ], type='str'),
+            proxied           = dict(required=False, default=False, type='bool'),
             record            = dict(required=False, default='@', aliases=['name'], type='str'),
             service           = dict(required=False, default=None, type='str'),
             solo              = dict(required=False, default=None, type='bool'),
@@ -628,9 +667,6 @@ def main():
         changed = cf_api.delete_dns_records(solo=False)
         module.exit_json(changed=changed)
 
-# import module snippets
-from ansible.module_utils.basic import *
-from ansible.module_utils.urls import *
 
 if __name__ == '__main__':
     main()

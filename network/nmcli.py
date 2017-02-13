@@ -19,6 +19,10 @@
 # along with Ansible.    If not, see <http://www.gnu.org/licenses/>.
 
 
+ANSIBLE_METADATA = {'status': ['preview'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION='''
 ---
 module: nmcli
@@ -73,16 +77,16 @@ options:
         required: False
         default: None
         description:
-            - 'The IPv4 address to this interface using this format ie: "192.168.1.24/24"'
+            - 'The IPv4 address to this interface using this format ie: "192.0.2.24/24"'
     gw4:
         required: False
         description:
-            - 'The IPv4 gateway for this interface using this format ie: "192.168.100.1"'
+            - 'The IPv4 gateway for this interface using this format ie: "192.0.2.1"'
     dns4:
         required: False
         default: None
         description:
-            - 'A list of upto 3 dns servers, ipv4 format e.g. To add two IPv4 DNS server addresses: ["8.8.8.8 8.8.4.4"]'
+            - 'A list of upto 3 dns servers, ipv4 format e.g. To add two IPv4 DNS server addresses: ["192.0.2.53", "198.51.100.53"]'
     ip6:
         required: False
         default: None
@@ -228,46 +232,89 @@ The following examples are working examples that I have run in the field. I foll
 ```yml
 ---
 #devops_os_define_network
-storage_gw: "192.168.0.254"
-external_gw: "10.10.0.254"
-tenant_gw: "172.100.0.254"
+storage_gw: "192.0.2.254"
+external_gw: "198.51.100.254"
+tenant_gw: "203.0.113.254"
 
 #Team vars
 nmcli_team:
-    - {conn_name: 'tenant', ip4: "{{tenant_ip}}", gw4: "{{tenant_gw}}"}
-    - {conn_name: 'external', ip4: "{{external_ip}}", gw4: "{{external_gw}}"}
-    - {conn_name: 'storage', ip4: "{{storage_ip}}", gw4: "{{storage_gw}}"}
+  - conn_name: tenant
+    ip4: '{{ tenant_ip }}'
+    gw4: '{{ tenant_gw }}'
+  - conn_name: external
+    ip4: '{{ external_ip }}'
+    gw4: '{{ external_gw }}'
+  - conn_name: storage
+    ip4: '{{ storage_ip }}'
+    gw4: '{{ storage_gw }}'
 nmcli_team_slave:
-    - {conn_name: 'em1', ifname: 'em1', master: 'tenant'}
-    - {conn_name: 'em2', ifname: 'em2', master: 'tenant'}
-    - {conn_name: 'p2p1', ifname: 'p2p1', master: 'storage'}
-    - {conn_name: 'p2p2', ifname: 'p2p2', master: 'external'}
+  - conn_name: em1
+    ifname: em1
+    master: tenant
+  - conn_name: em2
+    ifname: em2
+    master: tenant
+  - conn_name: p2p1
+    ifname: p2p1
+    master: storage
+  - conn_name: p2p2
+    ifname: p2p2
+    master: external
 
 #bond vars
 nmcli_bond:
-    - {conn_name: 'tenant', ip4: "{{tenant_ip}}", gw4: '', mode: 'balance-rr'}
-    - {conn_name: 'external', ip4: "{{external_ip}}", gw4: '', mode: 'balance-rr'}
-    - {conn_name: 'storage', ip4: "{{storage_ip}}", gw4: "{{storage_gw}}", mode: 'balance-rr'}
+  - conn_name: tenant
+    ip4: '{{ tenant_ip }}'
+    gw4: ''
+    mode: balance-rr
+  - conn_name: external
+    ip4: '{{ external_ip }}'
+    gw4: ''
+    mode: balance-rr
+  - conn_name: storage
+    ip4: '{{ storage_ip }}'
+    gw4: '{{ storage_gw }}'
+    mode: balance-rr
 nmcli_bond_slave:
-    - {conn_name: 'em1', ifname: 'em1', master: 'tenant'}
-    - {conn_name: 'em2', ifname: 'em2', master: 'tenant'}
-    - {conn_name: 'p2p1', ifname: 'p2p1', master: 'storage'}
-    - {conn_name: 'p2p2', ifname: 'p2p2', master: 'external'}
+  - conn_name: em1
+    ifname: em1
+    master: tenant
+  - conn_name: em2
+    ifname: em2
+    master: tenant
+  - conn_name: p2p1
+    ifname: p2p1
+    master: storage
+  - conn_name: p2p2
+    ifname: p2p2
+    master: external
 
 #ethernet vars
 nmcli_ethernet:
-    - {conn_name: 'em1', ifname: 'em1', ip4: "{{tenant_ip}}", gw4: "{{tenant_gw}}"}
-    - {conn_name: 'em2', ifname: 'em2', ip4: "{{tenant_ip1}}", gw4: "{{tenant_gw}}"}
-    - {conn_name: 'p2p1', ifname: 'p2p1', ip4: "{{storage_ip}}", gw4: "{{storage_gw}}"}
-    - {conn_name: 'p2p2', ifname: 'p2p2', ip4: "{{external_ip}}", gw4: "{{external_gw}}"}
+  - conn_name: em1
+    ifname: em1
+    ip4: '{{ tenant_ip }}'
+    gw4: '{{ tenant_gw }}'
+  - conn_name: em2
+    ifname: em2
+    ip4: '{{ tenant_ip1 }}'
+    gw4: '{{ tenant_gw }}'
+  - conn_name: p2p1
+    ifname: p2p1
+    ip4: '{{ storage_ip }}'
+    gw4: '{{ storage_gw }}'
+  - conn_name: p2p2
+    ifname: p2p2
+    ip4: '{{ external_ip }}'
+    gw4: '{{ external_gw }}'
 ```
 
 ### host_vars
 ```yml
 ---
-storage_ip: "192.168.160.21/23"
-external_ip: "10.10.152.21/21"
-tenant_ip: "192.168.200.21/23"
+storage_ip: "192.0.2.91/23"
+external_ip: "198.51.100.23/21"
+tenant_ip: "203.0.113.77/23"
 ```
 
 
@@ -280,42 +327,70 @@ tenant_ip: "192.168.200.21/23"
   remote_user: root
   tasks:
 
-- name: install needed network manager libs
-  yum: name={{ item }} state=installed
-  with_items:
-    - NetworkManager-glib
-    - libnm-qt-devel.x86_64
-    - nm-connection-editor.x86_64
-    - libsemanage-python
-    - policycoreutils-python
+  - name: install needed network manager libs
+    yum:
+      name: '{{ item }}'
+      state: installed
+    with_items:
+      - NetworkManager-glib
+      - libnm-qt-devel.x86_64
+      - nm-connection-editor.x86_64
+      - libsemanage-python
+      - policycoreutils-python
 
 ##### Working with all cloud nodes - Teaming
   - name: try nmcli add team - conn_name only & ip4 gw4
-    nmcli: type=team conn_name={{item.conn_name}} ip4={{item.ip4}} gw4={{item.gw4}} state=present
+    nmcli:
+      type: team
+      conn_name: '{{ item.conn_name }}'
+      ip4: '{{ item.ip4 }}'
+      gw4: '{{ item.gw4 }}'
+      state: present
     with_items:
-      - "{{nmcli_team}}"
+      - '{{ nmcli_team }}'
 
   - name: try nmcli add teams-slave
-    nmcli: type=team-slave conn_name={{item.conn_name}} ifname={{item.ifname}} master={{item.master}} state=present
+    nmcli:
+      type: team-slave
+      conn_name: '{{ item.conn_name }}'
+      ifname: '{{ item.ifname }}'
+      master: '{{ item.master }}'
+      state: present
     with_items:
-      - "{{nmcli_team_slave}}"
+      - '{{ nmcli_team_slave }}'
 
 ###### Working with all cloud nodes - Bonding
 #  - name: try nmcli add bond - conn_name only & ip4 gw4 mode
-#    nmcli: type=bond conn_name={{item.conn_name}} ip4={{item.ip4}} gw4={{item.gw4}} mode={{item.mode}} state=present
+#    nmcli:
+#      type: bond
+#      conn_name: '{{ item.conn_name }}'
+#      ip4: '{{ item.ip4 }}'
+#      gw4: '{{ item.gw4 }}'
+#      mode: '{{ item.mode }}'
+#      state: present
 #    with_items:
-#      - "{{nmcli_bond}}"
+#      - '{{ nmcli_bond }}'
 #
 #  - name: try nmcli add bond-slave
-#    nmcli: type=bond-slave conn_name={{item.conn_name}} ifname={{item.ifname}} master={{item.master}} state=present
+#    nmcli:
+#      type: bond-slave
+#      conn_name: '{{ item.conn_name }}'
+#      ifname: '{{ item.ifname }}'
+#      master: '{{ item.master }}'
+#      state: present
 #    with_items:
-#      - "{{nmcli_bond_slave}}"
+#      - '{{ nmcli_bond_slave }}'
 
 ##### Working with all cloud nodes - Ethernet
 #  - name: nmcli add Ethernet - conn_name only & ip4 gw4
-#    nmcli: type=ethernet conn_name={{item.conn_name}} ip4={{item.ip4}} gw4={{item.gw4}} state=present
+#    nmcli:
+#      type: ethernet
+#      conn_name: '{{ item.conn_name }}'
+#      ip4: '{{ item.ip4 }}'
+#      gw4: '{{ item.gw4 }}'
+#      state: present
 #    with_items:
-#      - "{{nmcli_ethernet}}"
+#      - '{{ nmcli_ethernet }}'
 ```
 
 ## playbook-del.yml example
@@ -327,41 +402,77 @@ tenant_ip: "192.168.200.21/23"
   tasks:
 
   - name: try nmcli del team - multiple
-    nmcli: conn_name={{item.conn_name}} state=absent
+    nmcli:
+      conn_name: '{{ item.conn_name }}'
+      state: absent
     with_items:
-      - { conn_name: 'em1'}
-      - { conn_name: 'em2'}
-      - { conn_name: 'p1p1'}
-      - { conn_name: 'p1p2'}
-      - { conn_name: 'p2p1'}
-      - { conn_name: 'p2p2'}
-      - { conn_name: 'tenant'}
-      - { conn_name: 'storage'}
-      - { conn_name: 'external'}
-      - { conn_name: 'team-em1'}
-      - { conn_name: 'team-em2'}
-      - { conn_name: 'team-p1p1'}
-      - { conn_name: 'team-p1p2'}
-      - { conn_name: 'team-p2p1'}
-      - { conn_name: 'team-p2p2'}
+      - conn_name: em1
+      - conn_name: em2
+      - conn_name: p1p1
+      - conn_name: p1p2
+      - conn_name: p2p1
+      - conn_name: p2p2
+      - conn_name: tenant
+      - conn_name: storage
+      - conn_name: external
+      - conn_name: team-em1
+      - conn_name: team-em2
+      - conn_name: team-p1p1
+      - conn_name: team-p1p2
+      - conn_name: team-p2p1
+      - conn_name: team-p2p2
 ```
 # To add an Ethernet connection with static IP configuration, issue a command as follows
-- nmcli: conn_name=my-eth1 ifname=eth1 type=ethernet ip4=192.168.100.100/24 gw4=192.168.100.1 state=present
+- nmcli:
+    conn_name: my-eth1
+    ifname: eth1
+    type: ethernet
+    ip4: 192.0.2.100/24
+    gw4: 192.0.2.1
+    state: present
 
 # To add an Team connection with static IP configuration, issue a command as follows
-- nmcli: conn_name=my-team1 ifname=my-team1 type=team ip4=192.168.100.100/24 gw4=192.168.100.1 state=present autoconnect=yes
+- nmcli:
+    conn_name: my-team1
+    ifname: my-team1
+    type: team
+    ip4: 192.0.2.100/24
+    gw4: 192.0.2.1
+    state: present
+    autoconnect: yes
 
 # Optionally, at the same time specify IPv6 addresses for the device as follows:
-- nmcli: conn_name=my-eth1 ifname=eth1 type=ethernet ip4=192.168.100.100/24 gw4=192.168.100.1 ip6=abbe::cafe gw6=2001:db8::1 state=present
+- nmcli:
+    conn_name: my-eth1
+    ifname: eth1
+    type: ethernet
+    ip4: 192.0.2.100/24
+    gw4: 192.0.2.1
+    ip6: '2001:db8::cafe'
+    gw6: '2001:db8::1'
+    state: present
 
 # To add two IPv4 DNS server addresses:
--nmcli: conn_name=my-eth1 dns4=["8.8.8.8", "8.8.4.4"] state=present
+- nmcli:
+    conn_name: my-eth1
+    dns4:
+      - 192.0.2.53
+      - 198.51.100.53
+    state: present
 
 # To make a profile usable for all compatible Ethernet interfaces, issue a command as follows
-- nmcli: ctype=ethernet name=my-eth1 ifname="*" state=present
+- nmcli:
+    ctype: ethernet
+    name: my-eth1
+    ifname: *
+    state: present
 
 # To change the property of a setting e.g. MTU, issue a command as follows:
-- nmcli: conn_name=my-eth1 mtu=9000 type=ethernet state=present
+- nmcli:
+    conn_name: my-eth1
+    mtu: 9000
+    type: ethernet
+    state: present
 
     Exit Status's:
         - nmcli exits with status 0 if it succeeds, a value greater than 0 is
@@ -381,8 +492,21 @@ tenant_ip: "192.168.200.21/23"
 # import ansible.module_utils.basic
 import os
 import sys
-import dbus
-from gi.repository import NetworkManager, NMClient
+HAVE_DBUS=False
+try:
+    import dbus
+    HAVE_DBUS=True
+except ImportError:
+    pass
+
+HAVE_NM_CLIENT=False
+try:
+    from gi.repository import NetworkManager, NMClient
+    HAVE_NM_CLIENT=True
+except ImportError:
+    pass
+
+from ansible.module_utils.basic import AnsibleModule
 
 
 class Nmcli(object):
@@ -480,7 +604,7 @@ class Nmcli(object):
             for setting in secrets:
                 for key in secrets[setting]:
                     config[setting_name][key]=secrets[setting][key]
-        except Exception, e:
+        except Exception as e:
             pass
 
     def dict_to_string(self, d):
@@ -491,13 +615,13 @@ class Nmcli(object):
             val=d[key]
             str_val=""
             add_string=True
-            if type(val)==type(dbus.Array([])):
+            if isinstance(val, dbus.Array):
                 for elt in val:
-                    if type(elt)==type(dbus.Byte(1)):
+                    if isinstance(elt, dbus.Byte):
                         str_val+="%s " % int(elt)
-                    elif type(elt)==type(dbus.String("")):
+                    elif isinstance(elt, dbus.String):
                         str_val+="%s" % elt
-            elif type(val)==type(dbus.Dictionary({})):
+            elif isinstance(val, dbus.Dictionary):
                 dstr+=self.dict_to_string(val)
                 add_string=False
             else:
@@ -513,6 +637,12 @@ class Nmcli(object):
             setting_list.append(self.dict_to_string(config[setting_name]))
         return setting_list
         # print ""
+
+    def bool_to_string(self, boolean):
+        if boolean:
+            return "yes"
+        else:
+            return "no"
 
     def list_connection_info(self):
         # Ask the settings service for the list of connections it provides
@@ -602,7 +732,7 @@ class Nmcli(object):
             cmd.append(self.gw6)
         if self.autoconnect is not None:
             cmd.append('autoconnect')
-            cmd.append(self.autoconnect)
+            cmd.append(self.bool_to_string(self.autoconnect))
         return cmd
 
     def modify_connection_team(self):
@@ -625,13 +755,13 @@ class Nmcli(object):
             cmd.append(self.ip6)
         if self.gw6 is not None:
             cmd.append('ipv6.gateway')
-            cmd.append(self.gw4)
+            cmd.append(self.gw6)
         if self.dns6 is not None:
             cmd.append('ipv6.dns')
             cmd.append(self.dns6)
         if self.autoconnect is not None:
             cmd.append('autoconnect')
-            cmd.append(self.autoconnect)
+            cmd.append(self.bool_to_string(self.autoconnect))
             # Can't use MTU with team
         return cmd
 
@@ -704,7 +834,7 @@ class Nmcli(object):
             cmd.append(self.gw6)
         if self.autoconnect is not None:
             cmd.append('autoconnect')
-            cmd.append(self.autoconnect)
+            cmd.append(self.bool_to_string(self.autoconnect))
         if self.mode is not None:
             cmd.append('mode')
             cmd.append(self.mode)
@@ -745,13 +875,13 @@ class Nmcli(object):
             cmd.append(self.ip6)
         if self.gw6 is not None:
             cmd.append('ipv6.gateway')
-            cmd.append(self.gw4)
+            cmd.append(self.gw6)
         if self.dns6 is not None:
             cmd.append('ipv6.dns')
             cmd.append(self.dns6)
         if self.autoconnect is not None:
             cmd.append('autoconnect')
-            cmd.append(self.autoconnect)
+            cmd.append(self.bool_to_string(self.autoconnect))
         return cmd
 
     def create_connection_bond_slave(self):
@@ -790,8 +920,8 @@ class Nmcli(object):
         cmd=[self.module.get_bin_path('nmcli', True)]
         # format for creating ethernet interface
         # To add an Ethernet connection with static IP configuration, issue a command as follows
-        # - nmcli: name=add conn_name=my-eth1 ifname=eth1 type=ethernet ip4=192.168.100.100/24 gw4=192.168.100.1 state=present
-        # nmcli con add con-name my-eth1 ifname eth1 type ethernet ip4 192.168.100.100/24 gw4 192.168.100.1
+        # - nmcli: name=add conn_name=my-eth1 ifname=eth1 type=ethernet ip4=192.0.2.100/24 gw4=192.0.2.1 state=present
+        # nmcli con add con-name my-eth1 ifname eth1 type ethernet ip4 192.0.2.100/24 gw4 192.0.2.1
         cmd.append('con')
         cmd.append('add')
         cmd.append('type')
@@ -820,15 +950,15 @@ class Nmcli(object):
             cmd.append(self.gw6)
         if self.autoconnect is not None:
             cmd.append('autoconnect')
-            cmd.append(self.autoconnect)
+            cmd.append(self.bool_to_string(self.autoconnect))
         return cmd
 
     def modify_connection_ethernet(self):
         cmd=[self.module.get_bin_path('nmcli', True)]
         # format for  modifying ethernet interface
         # To add an Ethernet connection with static IP configuration, issue a command as follows
-        # - nmcli: name=add conn_name=my-eth1 ifname=eth1 type=ethernet ip4=192.168.100.100/24 gw4=192.168.100.1 state=present
-        # nmcli con add con-name my-eth1 ifname eth1 type ethernet ip4 192.168.100.100/24 gw4 192.168.100.1
+        # - nmcli: name=add conn_name=my-eth1 ifname=eth1 type=ethernet ip4=192.0.2.100/24 gw4=192.0.2.1 state=present
+        # nmcli con add con-name my-eth1 ifname eth1 type ethernet ip4 192.0.2.100/24 gw4 192.0.2.1
         cmd.append('con')
         cmd.append('mod')
         cmd.append(self.conn_name)
@@ -846,7 +976,7 @@ class Nmcli(object):
             cmd.append(self.ip6)
         if self.gw6 is not None:
             cmd.append('ipv6.gateway')
-            cmd.append(self.gw4)
+            cmd.append(self.gw6)
         if self.dns6 is not None:
             cmd.append('ipv6.dns')
             cmd.append(self.dns6)
@@ -855,7 +985,7 @@ class Nmcli(object):
             cmd.append(self.mtu)
         if self.autoconnect is not None:
             cmd.append('autoconnect')
-            cmd.append(self.autoconnect)
+            cmd.append(self.bool_to_string(self.autoconnect))
         return cmd
 
     def create_connection_bridge(self):
@@ -964,7 +1094,7 @@ def main():
     # Parsing argument file
     module=AnsibleModule(
         argument_spec=dict(
-            autoconnect=dict(required=False, default=None, choices=['yes', 'no'], type='str'),
+            autoconnect=dict(required=False, default=None, type='bool'),
             state=dict(required=True, choices=['present', 'absent'], type='str'),
             conn_name=dict(required=True, type='str'),
             master=dict(required=False, default=None, type='str'),
@@ -987,7 +1117,7 @@ def main():
             mtu=dict(required=False, default=None, type='str'),
             mac=dict(required=False, default=None, type='str'),
             # bridge specific vars
-            stp=dict(required=False, default='yes', choices=['yes', 'no'], type='str'),
+            stp=dict(required=False, default=True, type='bool'),
             priority=dict(required=False, default="128", type='str'),
             slavepriority=dict(required=False, default="32", type='str'),
             forwarddelay=dict(required=False, default="15", type='str'),
@@ -1003,6 +1133,12 @@ def main():
         ),
         supports_check_mode=True
     )
+
+    if not HAVE_DBUS:
+        module.fail_json(msg="This module requires dbus python bindings")
+
+    if not HAVE_NM_CLIENT:
+        module.fail_json(msg="This module requires NetworkManager glib API")
 
     nmcli=Nmcli(module)
 
@@ -1058,7 +1194,5 @@ def main():
 
     module.exit_json(**result)
 
-# import module snippets
-from ansible.module_utils.basic import *
-
-main()
+if __name__ == '__main__':
+    main()

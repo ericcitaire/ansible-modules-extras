@@ -15,6 +15,10 @@
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 
+ANSIBLE_METADATA = {'status': ['preview'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 ---
 module: nagios
@@ -31,8 +35,9 @@ options:
     description:
       - Action to take.
       - servicegroup options were added in 2.0.
+      - delete_downtime options were added in 2.2.
     required: true
-    choices: [ "downtime", "enable_alerts", "disable_alerts", "silence", "unsilence",
+    choices: [ "downtime", "delete_downtime", "enable_alerts", "disable_alerts", "silence", "unsilence",
                "silence_nagios", "unsilence_nagios", "command", "servicegroup_service_downtime",
                "servicegroup_host_downtime" ]
   host:
@@ -88,50 +93,107 @@ author: "Tim Bielawa (@tbielawa)"
 
 EXAMPLES = '''
 # set 30 minutes of apache downtime
-- nagios: action=downtime minutes=30 service=httpd host={{ inventory_hostname }}
+- nagios:
+    action: downtime
+    minutes: 30
+    service: httpd
+    host: '{{ inventory_hostname }}'
 
 # schedule an hour of HOST downtime
-- nagios: action=downtime minutes=60 service=host host={{ inventory_hostname }}
+- nagios:
+    action: downtime
+    minutes: 60
+    service: host
+    host: '{{ inventory_hostname }}'
 
 # schedule an hour of HOST downtime, with a comment describing the reason
-- nagios: action=downtime minutes=60 service=host host={{ inventory_hostname }}
-          comment='This host needs disciplined'
+- nagios:
+    action: downtime
+    minutes: 60
+    service: host
+    host: '{{ inventory_hostname }}'
+    comment: Rebuilding machine
 
 # schedule downtime for ALL services on HOST
-- nagios: action=downtime minutes=45 service=all host={{ inventory_hostname }}
+- nagios:
+    action: downtime
+    minutes: 45
+    service: all
+    host: '{{ inventory_hostname }}'
 
 # schedule downtime for a few services
-- nagios: action=downtime services=frob,foobar,qeuz host={{ inventory_hostname }}
+- nagios:
+    action: downtime
+    services: frob,foobar,qeuz
+    host: '{{ inventory_hostname }}'
 
 # set 30 minutes downtime for all services in servicegroup foo
-- nagios: action=servicegroup_service_downtime minutes=30 servicegroup=foo host={{ inventory_hostname }}
+- nagios:
+    action: servicegroup_service_downtime
+    minutes: 30
+    servicegroup: foo
+    host: '{{ inventory_hostname }}'
 
 # set 30 minutes downtime for all host in servicegroup foo
-- nagios: action=servicegroup_host_downtime minutes=30 servicegroup=foo host={{ inventory_hostname }}
+- nagios:
+    action: servicegroup_host_downtime
+    minutes: 30
+    servicegroup: foo
+    host: '{{ inventory_hostname }}'
+
+# delete all downtime for a given host
+- nagios:
+    action: delete_downtime
+    host: '{{ inventory_hostname }}'
+    service: all
+
+# delete all downtime for HOST with a particular comment
+- nagios:
+    action: delete_downtime
+    host: '{{ inventory_hostname }}'
+    service: host
+    comment: Planned maintenance
 
 # enable SMART disk alerts
-- nagios: action=enable_alerts service=smart host={{ inventory_hostname }}
+- nagios:
+    action: enable_alerts
+    service: smart
+    host: '{{ inventory_hostname }}'
 
 # "two services at once: disable httpd and nfs alerts"
-- nagios: action=disable_alerts service=httpd,nfs host={{ inventory_hostname }}
+- nagios:
+    action: disable_alerts
+    service: httpd,nfs
+    host: '{{ inventory_hostname }}'
 
 # disable HOST alerts
-- nagios: action=disable_alerts service=host host={{ inventory_hostname }}
+- nagios:
+    action: disable_alerts
+    service: host
+    host: '{{ inventory_hostname }}'
 
 # silence ALL alerts
-- nagios: action=silence host={{ inventory_hostname }}
+- nagios:
+    action: silence
+    host: '{{ inventory_hostname }}'
 
 # unsilence all alerts
-- nagios: action=unsilence host={{ inventory_hostname }}
+- nagios:
+    action: unsilence
+    host: '{{ inventory_hostname }}'
 
 # SHUT UP NAGIOS
-- nagios: action=silence_nagios
+- nagios:
+    action: silence_nagios
 
 # ANNOY ME NAGIOS
-- nagios: action=unsilence_nagios
+- nagios:
+    action: unsilence_nagios
 
 # command something
-- nagios: action=command command='DISABLE_FAILURE_PREDICTION'
+- nagios:
+    action: command
+    command: DISABLE_FAILURE_PREDICTION
 '''
 
 import ConfigParser
@@ -181,6 +243,7 @@ def which_cmdfile():
 def main():
     ACTION_CHOICES = [
         'downtime',
+        'delete_downtime',
         'silence',
         'unsilence',
         'enable_alerts',
@@ -241,6 +304,12 @@ def main():
                 module.fail_json(msg='minutes must be a number')
         except Exception:
             module.fail_json(msg='invalid entry for minutes')
+
+    ######################################################################
+    if action == 'delete_downtime':
+        # Make sure there's an actual service selected
+        if not services:
+            module.fail_json(msg='no service selected to set downtime for')
 
     ######################################################################
 
@@ -383,6 +452,47 @@ class Nagios(object):
 
         return dt_str
 
+    def _fmt_dt_del_str(self, cmd, host, svc=None, start=None, comment=None):
+        """
+        Format an external-command downtime deletion string.
+
+        cmd - Nagios command ID
+        host - Host to remove scheduled downtime from
+        comment - Reason downtime was added (upgrade, reboot, etc)
+        start - Start of downtime in seconds since 12:00AM Jan 1 1970
+        svc - Service to remove downtime for, omit to remove all downtime for the host
+
+        Syntax: [submitted] COMMAND;<host_name>;
+        [<service_desription>];[<start_time>];[<comment>]
+        """
+
+        entry_time = self._now()
+        hdr = "[%s] %s;%s;" % (entry_time, cmd, host)
+
+        if comment is None:
+            comment = self.comment
+
+        dt_del_args = []
+        if svc is not None:
+            dt_del_args.append(svc)
+        else:
+            dt_del_args.append('')
+
+        if start is not None:
+            dt_del_args.append(str(start))
+        else:
+            dt_del_args.append('')
+
+        if comment is not None:
+            dt_del_args.append(comment)
+        else:
+            dt_del_args.append('')
+
+        dt_del_arg_str = ";".join(dt_del_args)
+        dt_del_str = hdr + dt_del_arg_str + "\n"
+
+        return dt_del_str
+
     def _fmt_notif_str(self, cmd, host=None, svc=None):
         """
         Format an external-command notification string.
@@ -461,6 +571,26 @@ class Nagios(object):
         cmd = "SCHEDULE_HOST_SVC_DOWNTIME"
         dt_cmd_str = self._fmt_dt_str(cmd, host, minutes)
         self._write_command(dt_cmd_str)
+
+    def delete_host_downtime(self, host, services=None, comment=None):
+        """
+        This command is used to remove scheduled downtime for a particular
+        host.
+
+        Syntax: DEL_DOWNTIME_BY_HOST_NAME;<host_name>;
+        [<service_desription>];[<start_time>];[<comment>]
+        """
+
+        cmd = "DEL_DOWNTIME_BY_HOST_NAME"
+
+        if services is None:
+            dt_del_cmd_str = self._fmt_dt_del_str(cmd, host, comment=comment)
+            self._write_command(dt_del_cmd_str)
+        else:
+            for service in services:
+                dt_del_cmd_str = self._fmt_dt_del_str(cmd, host, svc=service, comment=comment)
+                self._write_command(dt_del_cmd_str)
+
 
     def schedule_hostgroup_host_downtime(self, hostgroup, minutes=30):
         """
@@ -891,6 +1021,15 @@ class Nagios(object):
                 self.schedule_svc_downtime(self.host,
                                            services=self.services,
                                            minutes=self.minutes)
+
+        elif self.action == 'delete_downtime':
+            if self.services=='host':
+                self.delete_host_downtime(self.host)
+            elif self.services=='all':
+                self.delete_host_downtime(self.host, comment='')
+            else:
+                self.delete_host_downtime(self.host, services=self.services)
+
         elif self.action == "servicegroup_host_downtime":
             if self.servicegroup:
                 self.schedule_servicegroup_host_downtime(servicegroup = self.servicegroup, minutes = self.minutes)
@@ -943,4 +1082,6 @@ class Nagios(object):
 ######################################################################
 # import module snippets
 from ansible.module_utils.basic import *
-main()
+
+if __name__ == '__main__':
+    main()

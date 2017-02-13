@@ -19,12 +19,9 @@
 # along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
 # import module snippets
 
-# Import Datadog
-try:
-    from datadog import initialize, api
-    HAS_DATADOG = True
-except:
-    HAS_DATADOG = False
+ANSIBLE_METADATA = {'status': ['preview'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
 
 DOCUMENTATION = '''
 ---
@@ -34,8 +31,7 @@ description:
 - "Manages monitors within Datadog"
 - "Options like described on http://docs.datadoghq.com/api/"
 version_added: "2.0"
-author: "Sebastian Kornehl (@skornehl)" 
-notes: []
+author: "Sebastian Kornehl (@skornehl)"
 requirements: [datadog]
 options:
     api_key:
@@ -48,6 +44,11 @@ options:
         description: ["The designated state of the monitor."]
         required: true
         choices: ['present', 'absent', 'muted', 'unmuted']
+    tags:
+        description: ["A list of tags to associate with your monitor when creating or updating. This can help you categorize and filter monitors."]
+        required: false
+        default: None
+        version_added: "2.2"
     type:
         description:
             - "The type of the monitor."
@@ -63,7 +64,7 @@ options:
         description: ["The name of the alert."]
         required: true
     message:
-        description: ["A message to include with notifications for this monitor. Email notifications can be sent to specific users by using the same '@username' notation as events."]
+        description: ["A message to include with notifications for this monitor. Email notifications can be sent to specific users by using the same '@username' notation as events. Monitor message template variables can be accessed by using double square brackets, i.e '[[' and ']]'."]
         required: false
         default: null
     silenced:
@@ -98,6 +99,21 @@ options:
         description: ["A dictionary of thresholds by status. This option is only available for service checks and metric alerts. Because each of them can have multiple thresholds, we don't define them directly in the query."]
         required: false
         default: {'ok': 1, 'critical': 1, 'warning': 1}
+    locked:
+        description: ["A boolean indicating whether changes to this monitor should be restricted to the creator or admins."]
+        required: false
+        default: False
+        version_added: "2.2"
+    require_full_window:
+        description: ["A boolean indicating whether this monitor needs a full window of data before it's evaluated. We highly recommend you set this to False for sparse metrics, otherwise some evaluations will be skipped."]
+        required: false
+        default: null
+        version_added: "2.3"
+    id:
+        description: ["The id of the alert. If set, will be used instead of the name to locate the alert."]
+        required: false
+        default: null
+        version_added: "2.3"
 '''
 
 EXAMPLES = '''
@@ -107,7 +123,7 @@ datadog_monitor:
   name: "Test monitor"
   state: "present"
   query: "datadog.agent.up".over("host:host1").last(2).count_by_status()"
-  message: "Some message."
+  message: "Host [[host.name]] with IP [[host.ip]] is failing to report to datadog."
   api_key: "9775a026f1ca7d1c6c5af9d94d9595a4"
   app_key: "87ce4a24b5553d2e482ea8a8500e71b8ad4554ff"
 
@@ -134,12 +150,22 @@ datadog_monitor:
   app_key: "87ce4a24b5553d2e482ea8a8500e71b8ad4554ff"
 '''
 
+# Import Datadog
+try:
+    from datadog import initialize, api
+    HAS_DATADOG = True
+except:
+    HAS_DATADOG = False
+
+from ansible.module_utils.basic import AnsibleModule
+from ansible.module_utils.pycompat24 import get_exception
+
 
 def main():
     module = AnsibleModule(
         argument_spec=dict(
-            api_key=dict(required=True),
-            app_key=dict(required=True),
+            api_key=dict(required=True, no_log=True),
+            app_key=dict(required=True, no_log=True),
             state=dict(required=True, choises=['present', 'absent', 'mute', 'unmute']),
             type=dict(required=False, choises=['metric alert', 'service check', 'event alert']),
             name=dict(required=True),
@@ -153,6 +179,10 @@ def main():
             escalation_message=dict(required=False, default=None),
             notify_audit=dict(required=False, default=False, type='bool'),
             thresholds=dict(required=False, type='dict', default=None),
+            tags=dict(required=False, type='list', default=None),
+            locked=dict(required=False, default=False, type='bool'),
+            require_full_window=dict(required=False, default=None, type='bool'),
+            id=dict(required=False)
         )
     )
 
@@ -176,24 +206,40 @@ def main():
     elif module.params['state'] == 'unmute':
         unmute_monitor(module)
 
+def _fix_template_vars(message):
+    if message:
+        return message.replace('[[', '{{').replace(']]', '}}')
+    return message
+
 
 def _get_monitor(module):
-    for monitor in api.Monitor.get_all():
-        if monitor['name'] == module.params['name']:
-            return monitor
+    if module.params['id'] is not None:
+        monitor = api.Monitor.get(module.params['id'])
+        if 'errors' in monitor:
+            module.fail_json(msg="Failed to retrieve monitor with id %s, errors are %s" % (module.params['id'], str(monitor['errors'])))
+        return monitor
+    else:
+        monitors = api.Monitor.get_all()
+        for monitor in monitors:
+            if monitor['name'] == module.params['name']:
+                return monitor
     return {}
 
 
 def _post_monitor(module, options):
     try:
-        msg = api.Monitor.create(type=module.params['type'], query=module.params['query'],
-                                 name=module.params['name'], message=module.params['message'],
-                                 options=options)
+        kwargs = dict(type=module.params['type'], query=module.params['query'],
+                      name=module.params['name'], message=_fix_template_vars(module.params['message']),
+                      options=options)
+        if module.params['tags'] is not None:
+            kwargs['tags'] = module.params['tags']
+        msg = api.Monitor.create(**kwargs)
         if 'errors' in msg:
             module.fail_json(msg=str(msg['errors']))
         else:
             module.exit_json(changed=True, msg=msg)
-    except Exception, e:
+    except Exception:
+        e = get_exception()
         module.fail_json(msg=str(e))
 
 def _equal_dicts(a, b, ignore_keys):
@@ -203,16 +249,21 @@ def _equal_dicts(a, b, ignore_keys):
 
 def _update_monitor(module, monitor, options):
     try:
-        msg = api.Monitor.update(id=monitor['id'], query=module.params['query'],
-                                 name=module.params['name'], message=module.params['message'],
-                                 options=options)
+        kwargs = dict(id=monitor['id'], query=module.params['query'],
+                      name=module.params['name'], message=_fix_template_vars(module.params['message']),
+                      options=options)
+        if module.params['tags'] is not None:
+            kwargs['tags'] = module.params['tags']
+        msg = api.Monitor.update(**kwargs)
+
         if 'errors' in msg:
             module.fail_json(msg=str(msg['errors']))
         elif _equal_dicts(msg, monitor, ['creator', 'overall_state', 'modified']):
             module.exit_json(changed=False, msg=msg)
         else:
             module.exit_json(changed=True, msg=msg)
-    except Exception, e:
+    except Exception:
+        e = get_exception()
         module.fail_json(msg=str(e))
 
 
@@ -225,6 +276,8 @@ def install_monitor(module):
         "renotify_interval": module.params['renotify_interval'],
         "escalation_message": module.params['escalation_message'],
         "notify_audit": module.boolean(module.params['notify_audit']),
+        "locked": module.boolean(module.params['locked']),
+        "require_full_window" : module.params['require_full_window']
     }
 
     if module.params['type'] == "service check":
@@ -246,7 +299,8 @@ def delete_monitor(module):
     try:
         msg = api.Monitor.delete(monitor['id'])
         module.exit_json(changed=True, msg=msg)
-    except Exception, e:
+    except Exception:
+        e = get_exception()
         module.fail_json(msg=str(e))
 
 
@@ -265,7 +319,8 @@ def mute_monitor(module):
         else:
             msg = api.Monitor.mute(id=monitor['id'], silenced=module.params['silenced'])
         module.exit_json(changed=True, msg=msg)
-    except Exception, e:
+    except Exception:
+        e = get_exception()
         module.fail_json(msg=str(e))
 
 
@@ -278,10 +333,10 @@ def unmute_monitor(module):
     try:
         msg = api.Monitor.unmute(monitor['id'])
         module.exit_json(changed=True, msg=msg)
-    except Exception, e:
+    except Exception:
+        e = get_exception()
         module.fail_json(msg=str(e))
 
 
-from ansible.module_utils.basic import *
-from ansible.module_utils.urls import *
-main()
+if __name__ == '__main__':
+    main()

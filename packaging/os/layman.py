@@ -21,6 +21,10 @@
 import shutil
 from os import path
 
+ANSIBLE_METADATA = {'status': ['preview'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 ---
 module: layman
@@ -64,19 +68,29 @@ options:
 
 EXAMPLES = '''
 # Install the overlay 'mozilla' which is on the central overlays list.
-- layman: name=mozilla
+- layman:
+    name: mozilla
 
 # Install the overlay 'cvut' from the specified alternative list.
-- layman: name=cvut list_url=http://raw.github.com/cvut/gentoo-overlay/master/overlay.xml
+- layman:
+    name: cvut
+    list_url: 'http://raw.github.com/cvut/gentoo-overlay/master/overlay.xml'
 
 # Update (sync) the overlay 'cvut', or install if not installed yet.
-- layman: name=cvut list_url=http://raw.github.com/cvut/gentoo-overlay/master/overlay.xml state=updated
+- layman:
+    name: cvut
+    list_url: 'http://raw.github.com/cvut/gentoo-overlay/master/overlay.xml'
+    state: updated
 
 # Update (sync) all of the installed overlays.
-- layman: name=ALL state=updated
+- layman:
+    name: ALL
+    state: updated
 
 # Uninstall the overlay 'cvut'.
-- layman: name=cvut state=absent
+- layman:
+    name: cvut
+    state: absent
 '''
 
 USERAGENT = 'ansible-httpget'
@@ -120,7 +134,7 @@ def download_url(module, url, dest):
     try:
         with open(dest, 'w') as f:
             shutil.copyfileobj(response, f)
-    except IOError, e:
+    except IOError as e:
         raise ModuleError("Failed to write: %s" % str(e))
 
 
@@ -248,7 +262,7 @@ def main():
         else:
             changed = uninstall_overlay(module, name)
 
-    except ModuleError, e:
+    except ModuleError as e:
         module.fail_json(msg=e.message)
     else:
         module.exit_json(changed=changed, name=name)

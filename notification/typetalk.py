@@ -15,6 +15,10 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
+ANSIBLE_METADATA = {'status': ['preview'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 ---
 module: typetalk
@@ -44,7 +48,11 @@ author: "Takashi Someda (@tksmd)"
 '''
 
 EXAMPLES = '''
-- typetalk: client_id=12345 client_secret=12345 topic=1 msg="install completed"
+- typetalk:
+    client_id: 12345
+    client_secret: 12345
+    topic: 1
+    msg: install completed
 '''
 
 import urllib
@@ -56,6 +64,11 @@ except ImportError:
         import simplejson as json
     except ImportError:
         json = None
+
+# import module snippets
+from ansible.module_utils.basic import AnsibleModule
+from ansible.module_utils.pycompat24 import get_exception
+from ansible.module_utils.urls import fetch_url, ConnectionError
 
 
 def do_request(module, url, params, headers=None):
@@ -71,6 +84,7 @@ def do_request(module, url, params, headers=None):
         exc.code = info['status']
         raise exc
     return r
+
 
 def get_access_token(module, client_id, client_secret):
     params = {
@@ -95,7 +109,8 @@ def send_message(module, client_id, client_secret, topic, msg):
         }
         do_request(module, url, {'message': msg}, headers)
         return True, {'access_token': access_token}
-    except ConnectionError, e:
+    except ConnectionError:
+        e = get_exception()
         return False, e
 
 
@@ -126,8 +141,5 @@ def main():
     module.exit_json(changed=True, topic=topic, msg=msg)
 
 
-# import module snippets
-from ansible.module_utils.basic import *
-from ansible.module_utils.urls import *
 if __name__ == '__main__':
     main()
