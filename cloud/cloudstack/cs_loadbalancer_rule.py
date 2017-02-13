@@ -19,6 +19,10 @@
 # You should have received a copy of the GNU General Public License
 # along with Ansible. If not, see <http://www.gnu.org/licenses/>.
 
+ANSIBLE_METADATA = {'status': ['stableinterface'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 ---
 module: cs_loadbalancer_rule
@@ -217,12 +221,6 @@ state:
   sample: "Add"
 '''
 
-try:
-    from cs import CloudStack, CloudStackException, read_config
-    has_lib_cs = True
-except ImportError:
-    has_lib_cs = False
-
 # import cloudstack common
 from ansible.module_utils.cloudstack import *
 
@@ -333,7 +331,7 @@ class AnsibleCloudStackLBRule(AnsibleCloudStack):
                 self.module.fail_json(msg="Failed: '%s'" % res['errortext'])
             poll_async = self.module.params.get('poll_async')
             if poll_async:
-                res = self._poll_job(res, 'loadbalancer')
+                res = self.poll_job(res, 'loadbalancer')
         return rule
 
 
@@ -363,9 +361,6 @@ def main():
         required_together=cs_required_together(),
         supports_check_mode=True
     )
-
-    if not has_lib_cs:
-        module.fail_json(msg="python library cs required: pip install cs")
 
     try:
         acs_lb_rule = AnsibleCloudStackLBRule(module)

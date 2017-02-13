@@ -21,6 +21,10 @@
 # along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
 #
 
+ANSIBLE_METADATA = {'status': ['stableinterface'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 ---
 module: pkgutil 
@@ -54,17 +58,21 @@ options:
     description:
       - If you want to refresh your catalog from the mirror, set this to (C(yes)).
     required: false
-    choices: ["yes", "no"]
-    default: no
+    default: False
     version_added: "2.1"
 '''
 
 EXAMPLES = '''
 # Install a package
-pkgutil: name=CSWcommon state=present
+- pkgutil:
+    name: CSWcommon
+    state: present
 
 # Install a package from a specific repository
-pkgutil: name=CSWnrpe site='ftp://myinternal.repo/opencsw/kiel state=latest'
+- pkgutil:
+    name: CSWnrpe
+    site: 'ftp://myinternal.repo/opencsw/kiel'
+    state: latest
 '''
 
 import os
@@ -130,7 +138,7 @@ def main():
             name = dict(required = True),
             state = dict(required = True, choices=['present', 'absent','latest']),
             site = dict(default = None),
-            update_catalog = dict(required = False, default = "no", type='bool', choices=["yes","no"]),
+            update_catalog = dict(required = False, default = False, type='bool'),
         ),
         supports_check_mode=True
     )
@@ -221,4 +229,6 @@ def main():
 
 # import module snippets
 from ansible.module_utils.basic import *
-main()
+
+if __name__ == '__main__':
+    main()

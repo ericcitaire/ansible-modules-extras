@@ -19,6 +19,10 @@
 # along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
 #
 
+ANSIBLE_METADATA = {'status': ['preview'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 ---
 module: rabbitmq_binding
@@ -28,7 +32,7 @@ version_added: "2.0"
 short_description: This module manages rabbitMQ bindings
 description:
   - This module uses rabbitMQ Rest API to create/delete bindings
-requirements: [ python requests ]
+requirements: [ "requests >= 1.0.0" ]
 options:
     state:
         description:
@@ -94,10 +98,18 @@ options:
 
 EXAMPLES = '''
 # Bind myQueue to directExchange with routing key info
-- rabbitmq_binding: name=directExchange destination=myQueue type=queue routing_key=info
+- rabbitmq_binding:
+    name: directExchange
+    destination: myQueue
+    type: queue
+    routing_key: info
 
 # Bind directExchange to topicExchange with routing key *.info
-- rabbitmq_binding: name=topicExchange destination=topicExchange type=exchange routing_key="*.info"
+- rabbitmq_binding:
+    name: topicExchange
+    destination: topicExchange
+    type: exchange
+    routing_key: *.info
 '''
 
 import requests
@@ -127,6 +139,11 @@ def main():
     else:
         dest_type="e"
 
+    if module.params['routing_key'] == "":
+        props = "~"
+    else:
+        props = urllib.quote(module.params['routing_key'],'')
+
     url = "http://%s:%s/api/bindings/%s/e/%s/%s/%s/%s" % (
         module.params['login_host'],
         module.params['login_port'],
@@ -134,7 +151,7 @@ def main():
         urllib.quote(module.params['name'],''),
         dest_type,
         urllib.quote(module.params['destination'],''),
-        urllib.quote(module.params['routing_key'],'')
+        props
     )
 
     # Check if exchange already exists
@@ -211,4 +228,6 @@ def main():
 
 # import module snippets
 from ansible.module_utils.basic import *
-main()
+
+if __name__ == '__main__':
+    main()

@@ -19,6 +19,10 @@
 # You should have received a copy of the GNU General Public License
 # along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
 
+ANSIBLE_METADATA = {'status': ['preview'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 ---
 module: selinux_permissive
@@ -56,7 +60,9 @@ author: Michael Scherer <misc@zarb.org>
 '''
 
 EXAMPLES = '''
-- selinux_permissive: name=httpd_t permissive=true
+- selinux_permissive:
+    name: httpd_t
+    permissive: true
 '''
 
 HAVE_SEOBJECT = False
@@ -65,6 +71,8 @@ try:
     HAVE_SEOBJECT = True
 except ImportError:
     pass
+from ansible.module_utils.basic import *
+from ansible.module_utils.pycompat24 import get_exception
 
 
 def main():
@@ -90,7 +98,8 @@ def main():
 
     try:
         permissive_domains = seobject.permissiveRecords(store)
-    except ValueError, e:
+    except ValueError:
+        e = get_exception()
         module.fail_json(domain=domain, msg=str(e))
 
     # not supported on EL 6
@@ -99,7 +108,8 @@ def main():
 
     try:
         all_domains = permissive_domains.get_all()
-    except ValueError, e:
+    except ValueError:
+        e = get_exception()
         module.fail_json(domain=domain, msg=str(e))
 
     if permissive:
@@ -107,7 +117,8 @@ def main():
             if not module.check_mode:
                 try:
                     permissive_domains.add(domain)
-                except ValueError, e:
+                except ValueError:
+                    e = get_exception()
                     module.fail_json(domain=domain, msg=str(e))
             changed = True
     else:
@@ -115,7 +126,8 @@ def main():
             if not module.check_mode:
                 try:
                     permissive_domains.delete(domain)
-                except ValueError, e:
+                except ValueError:
+                    e = get_exception()
                     module.fail_json(domain=domain, msg=str(e))
             changed = True
 
@@ -123,8 +135,5 @@ def main():
                      permissive=permissive, domain=domain)
 
 
-#################################################
-# import module snippets
-from ansible.module_utils.basic import *
-
-main()
+if __name__ == '__main__':
+    main()

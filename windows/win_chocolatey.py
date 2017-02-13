@@ -21,6 +21,10 @@
 # this is a windows documentation stub.  actual code lives in the .ps1
 # file of the same name
 
+ANSIBLE_METADATA = {'status': ['preview'],
+                    'supported_by': 'committer',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 ---
 module: win_chocolatey
@@ -36,7 +40,6 @@ options:
   state:
     description:
       - State of the package on the system
-    required: false
     choices:
       - present
       - absent
@@ -44,7 +47,6 @@ options:
   force:
     description:
       - Forces install of the package (even if it already exists). Using Force will cause ansible to always report that a change was made
-    required: false
     choices:
       - yes
       - no
@@ -52,7 +54,6 @@ options:
   upgrade:
     description:
       - If package is already installed it, try to upgrade to the latest version or to the specified version
-    required: false
     choices:
       - yes
       - no
@@ -61,29 +62,32 @@ options:
     description:
       - Specific version of the package to be installed
       - Ignored when state == 'absent'
-    required: false
-    default: null
   source:
     description:
       - Specify source rather than using default chocolatey repository
-    require: false
-    default: null
   install_args:
     description:
       - Arguments to pass to the native installer
-    require: false
-    default: null
     version_added: '2.1'
   params:
     description:
       - Parameters to pass to the package
-    require: false
-    default: null
     version_added: '2.1'
+  allow_empty_checksums:
+    description:
+      - Allow empty Checksums to be used 
+    require: false
+    default: false
+    version_added: '2.2'
+  ignore_checksums:
+    description:
+      - Ignore Checksums 
+    require: false
+    default: false
+    version_added: '2.2'      
   ignore_dependencies:
     description:
       - Ignore dependencies, only install/upgrade the package itself
-    require: false
     default: false
     version_added: '2.1'
 author: "Trond Hindenes (@trondhindenes), Peter Mounce (@petemounce), Pepe Barbe (@elventear), Adam Keech (@smadam813)"
@@ -102,7 +106,7 @@ EXAMPLES = '''
   # Install notepadplusplus version 6.6
   win_chocolatey:
     name: notepadplusplus.install
-    version: 6.6
+    version: '6.6'
 
   # Uninstall git
   win_chocolatey:

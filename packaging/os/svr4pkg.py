@@ -19,6 +19,10 @@
 # along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
 #
 
+ANSIBLE_METADATA = {'status': ['preview'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 ---
 module: svr4pkg
@@ -75,19 +79,35 @@ options:
 
 EXAMPLES = '''
 # Install a package from an already copied file
-- svr4pkg: name=CSWcommon src=/tmp/cswpkgs.pkg state=present
+- svr4pkg:
+    name: CSWcommon
+    src: /tmp/cswpkgs.pkg
+    state: present
 
 # Install a package directly from an http site
-- svr4pkg: name=CSWpkgutil src=http://get.opencsw.org/now state=present zone=current
+- svr4pkg:
+    name: CSWpkgutil
+    src: 'http://get.opencsw.org/now'
+    state: present
+    zone: current
 
 # Install a package with a response file
-- svr4pkg: name=CSWggrep src=/tmp/third-party.pkg response_file=/tmp/ggrep.response state=present
+- svr4pkg:
+    name: CSWggrep
+    src: /tmp/third-party.pkg
+    response_file: /tmp/ggrep.response
+    state: present
 
 # Ensure that a package is not installed.
-- svr4pkg: name=SUNWgnome-sound-recorder state=absent
+- svr4pkg:
+    name: SUNWgnome-sound-recorder
+    state: absent
 
 # Ensure that a category is not installed.
-- svr4pkg: name=FIREFOX state=absent category=true
+- svr4pkg:
+    name: FIREFOX
+    state: absent
+    category: true
 '''
 
 
@@ -225,9 +245,10 @@ def main():
     else:
         result['changed'] = False
 
+    # rc will be none when the package already was installed and no action took place
     # Only return failed=False when the returncode is known to be good as there may be more
     # undocumented failure return codes
-    if rc not in (0, 2, 10, 20):
+    if rc not in (None, 0, 2, 10, 20):
         result['failed'] = True
     else:
         result['failed'] = False
@@ -241,4 +262,6 @@ def main():
 
 # import module snippets
 from ansible.module_utils.basic import *
-main()
+
+if __name__ == '__main__':
+    main()

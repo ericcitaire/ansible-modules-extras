@@ -19,6 +19,10 @@
 # along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
 
 
+ANSIBLE_METADATA = {'status': ['preview'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = """
 ---
 module: lxc_container
@@ -268,7 +272,8 @@ EXAMPLES = """
   register: lvm_container_info
 
 - name: Debug info on container "test-container-lvm"
-  debug: var=lvm_container_info
+  debug:
+    var: lvm_container_info
 
 - name: Run a command in a container and ensure its in a "stopped" state.
   lxc_container:
@@ -334,7 +339,8 @@ EXAMPLES = """
   register: clone_container_info
 
 - name: debug info on container "test-container"
-  debug: var=clone_container_info
+  debug:
+    var: clone_container_info
 
 - name: Clone a container using snapshot
   lxc_container:
@@ -364,7 +370,7 @@ EXAMPLES = """
 
 - name: Destroy a container
   lxc_container:
-    name: "{{ item }}"
+    name: '{{ item }}'
     state: absent
   with_items:
     - test-container-stopped
@@ -568,7 +574,7 @@ def create_script(command):
         f.close()
 
     # Ensure the script is executable.
-    os.chmod(script_file, 0700)
+    os.chmod(script_file, int('0700',8))
 
     # Output log file.
     stdout_file = os.fdopen(tempfile.mkstemp(prefix='lxc-attach-script-log')[0], 'ab')
@@ -603,6 +609,7 @@ class LxcContainerManagement(object):
         self.state = self.module.params.get('state', None)
         self.state_change = False
         self.lxc_vg = None
+        self.lxc_path = self.module.params.get('lxc_path', None)
         self.container_name = self.module.params['name']
         self.container = self.get_container_bind()
         self.archive_info = None
@@ -627,7 +634,7 @@ class LxcContainerManagement(object):
         return num
 
     @staticmethod
-    def _container_exists(container_name):
+    def _container_exists(container_name, lxc_path=None):
         """Check if a container exists.
 
         :param container_name: Name of the container.
@@ -635,7 +642,7 @@ class LxcContainerManagement(object):
         :returns: True or False if the container is found.
         :rtype: ``bol``
         """
-        if [i for i in lxc.list_containers() if i == container_name]:
+        if [i for i in lxc.list_containers(config_path=lxc_path) if i == container_name]:
             return True
         else:
             return False
@@ -681,45 +688,23 @@ class LxcContainerManagement(object):
         else:
             return return_dict
 
-    def _run_command(self, build_command, unsafe_shell=False, timeout=600):
+    def _run_command(self, build_command, unsafe_shell=False):
         """Return information from running an Ansible Command.
 
         This will squash the build command list into a string and then
         execute the command via Ansible. The output is returned to the method.
         This output is returned as `return_code`, `stdout`, `stderr`.
 
-        Prior to running the command the method will look to see if the LXC
-        lockfile is present. If the lockfile "/var/lock/subsys/lxc" the method
-        will wait upto 10 minutes for it to be gone; polling every 5 seconds.
-
         :param build_command: Used for the command and all options.
         :type build_command: ``list``
         :param unsafe_shell: Enable or Disable unsafe sell commands.
         :type unsafe_shell: ``bol``
-        :param timeout: Time before the container create process quites.
-        :type timeout: ``int``
         """
 
-        lockfile = '/var/lock/subsys/lxc'
-
-        for _ in xrange(timeout):
-            if os.path.exists(lockfile):
-                time.sleep(1)
-            else:
-                return self.module.run_command(
-                    ' '.join(build_command),
-                    use_unsafe_shell=unsafe_shell
-                )
-        else:
-            message = (
-                'The LXC subsystem is locked and after 5 minutes it never'
-                ' became unlocked. Lockfile [ %s ]' % lockfile
-            )
-            self.failure(
-                error='LXC subsystem locked',
-                rc=0,
-                msg=message
-            )
+        return self.module.run_command(
+            ' '.join(build_command),
+            use_unsafe_shell=unsafe_shell
+        )
 
     def _config(self):
         """Configure an LXC container.
@@ -944,7 +929,7 @@ class LxcContainerManagement(object):
         :rtype: ``str``
         """
 
-        if self._container_exists(container_name=self.container_name):
+        if self._container_exists(container_name=self.container_name, lxc_path=self.lxc_path):
             return str(self.container.state).lower()
         else:
             return str('absent')
@@ -1009,7 +994,7 @@ class LxcContainerManagement(object):
 
         clone_name = self.module.params.get('clone_name')
         if clone_name:
-            if not self._container_exists(container_name=clone_name):
+            if not self._container_exists(container_name=clone_name, lxc_path=self.lxc_path):
                 self.clone_info = {
                     'cloned': self._container_create_clone()
                 }
@@ -1026,7 +1011,7 @@ class LxcContainerManagement(object):
         """
 
         for _ in xrange(timeout):
-            if not self._container_exists(container_name=self.container_name):
+            if not self._container_exists(container_name=self.container_name, lxc_path=self.lxc_path):
                 break
 
             # Check if the container needs to have an archive created.
@@ -1065,7 +1050,7 @@ class LxcContainerManagement(object):
         """
 
         self.check_count(count=count, method='frozen')
-        if self._container_exists(container_name=self.container_name):
+        if self._container_exists(container_name=self.container_name, lxc_path=self.lxc_path):
             self._execute_command()
 
             # Perform any configuration updates
@@ -1102,7 +1087,7 @@ class LxcContainerManagement(object):
         """
 
         self.check_count(count=count, method='restart')
-        if self._container_exists(container_name=self.container_name):
+        if self._container_exists(container_name=self.container_name, lxc_path=self.lxc_path):
             self._execute_command()
 
             # Perform any configuration updates
@@ -1135,7 +1120,7 @@ class LxcContainerManagement(object):
         """
 
         self.check_count(count=count, method='stop')
-        if self._container_exists(container_name=self.container_name):
+        if self._container_exists(container_name=self.container_name, lxc_path=self.lxc_path):
             self._execute_command()
 
             # Perform any configuration updates
@@ -1165,7 +1150,7 @@ class LxcContainerManagement(object):
         """
 
         self.check_count(count=count, method='start')
-        if self._container_exists(container_name=self.container_name):
+        if self._container_exists(container_name=self.container_name, lxc_path=self.lxc_path):
             container_state = self._get_state()
             if container_state == 'running':
                 pass
@@ -1371,7 +1356,7 @@ class LxcContainerManagement(object):
         :type source_dir: ``str``
         """
 
-        old_umask = os.umask(0077)
+        old_umask = os.umask(int('0077',8))
 
         archive_path = self.module.params.get('archive_path')
         if not os.path.isdir(archive_path):

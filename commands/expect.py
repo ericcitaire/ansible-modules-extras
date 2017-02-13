@@ -27,6 +27,10 @@ except ImportError:
     HAS_PEXPECT = False
 
 
+ANSIBLE_METADATA = {'status': ['preview'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 ---
 module: expect
@@ -167,7 +171,6 @@ def main():
                 cmd=args,
                 stdout="skipped, since %s exists" % v,
                 changed=False,
-                stderr=False,
                 rc=0
             )
 
@@ -181,7 +184,6 @@ def main():
                 cmd=args,
                 stdout="skipped, since %s does not exist" % v,
                 changed=False,
-                stderr=False,
                 rc=0
             )
 
@@ -197,7 +199,8 @@ def main():
             # Use pexpect.runu in pexpect>=3.3,<4
             out, rc = pexpect.runu(args, timeout=timeout, withexitstatus=True,
                                    events=events, cwd=chdir, echo=echo)
-    except (TypeError, AttributeError), e:
+    except (TypeError, AttributeError):
+        e = get_exception()
         # This should catch all insufficient versions of pexpect
         # We deem them insufficient for their lack of ability to specify
         # to not echo responses via the run/runu functions, which would
@@ -205,7 +208,8 @@ def main():
         module.fail_json(msg='Insufficient version of pexpect installed '
                              '(%s), this module requires pexpect>=3.3. '
                              'Error was %s' % (pexpect.__version__, e))
-    except pexpect.ExceptionPexpect, e:
+    except pexpect.ExceptionPexpect:
+        e = get_exception()
         module.fail_json(msg='%s' % e)
 
     endd = datetime.datetime.now()
@@ -214,7 +218,7 @@ def main():
     if out is None:
         out = ''
 
-    module.exit_json(
+    ret = dict(
         cmd=args,
         stdout=out.rstrip('\r\n'),
         rc=rc,
@@ -224,7 +228,15 @@ def main():
         changed=True,
     )
 
+    if rc is not None:
+        module.exit_json(**ret)
+    else:
+        ret['msg'] = 'command exceeded timeout'
+        module.fail_json(**ret)
+
 # import module snippets
 from ansible.module_utils.basic import *
+from ansible.module_utils.pycompat24 import get_exception
 
-main()
+if __name__ == '__main__':
+    main()

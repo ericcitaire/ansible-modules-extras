@@ -18,6 +18,10 @@
 # You should have received a copy of the GNU General Public License
 # along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
 
+ANSIBLE_METADATA = {'status': ['preview'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 ---
 module: vmware_datacenter
@@ -91,6 +95,7 @@ def create_datacenter(context, module):
 
     try:
         datacenter = get_datacenter(context, module)
+        changed = False
         if not datacenter:
             changed = True
             if not module.check_mode:
@@ -114,6 +119,7 @@ def destroy_datacenter(context, module):
 
     try:
         datacenter = get_datacenter(context, module)
+        changed = False
         if datacenter:
             changed = True
             if not module.check_mode:

@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 #
 # (c) 2015, Darren Worrall <darren@iweb.co.uk>
+# (c) 2015, René Moser <mail@renemoser.net>
 #
 # This file is part of Ansible
 #
@@ -18,6 +19,10 @@
 # You should have received a copy of the GNU General Public License
 # along with Ansible. If not, see <http://www.gnu.org/licenses/>.
 
+ANSIBLE_METADATA = {'status': ['stableinterface'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 ---
 module: cs_ip_address
@@ -27,7 +32,9 @@ description:
       limitations this is not an idempotent call, so be sure to only
       conditionally call this when C(state=present)
 version_added: '2.0'
-author: "Darren Worrall @dazworrall"
+author:
+    - "Darren Worrall (@dazworrall)"
+    - "René Moser (@resmo)"
 options:
   ip_address:
     description:
@@ -45,6 +52,12 @@ options:
       - Network the IP address is related to.
     required: false
     default: null
+  vpc:
+    description:
+      - VPC the IP address is related to.
+    required: false
+    default: null
+    version_added: "2.2"
   account:
     description:
       - Account the IP address is related to.
@@ -118,13 +131,6 @@ domain:
   sample: example domain
 '''
 
-
-try:
-    from cs import CloudStack, CloudStackException, read_config
-    has_lib_cs = True
-except ImportError:
-    has_lib_cs = False
-
 # import cloudstack common
 from ansible.module_utils.cloudstack import *
 
@@ -137,62 +143,34 @@ class AnsibleCloudStackIPAddress(AnsibleCloudStack):
             'ipaddress': 'ip_address',
         }
 
-
-    #TODO: Add to parent class, duplicated in cs_network
-    def get_network(self, key=None, network=None):
-        if not network:
-            network = self.module.params.get('network')
-
-        if not network:
-            return None
-
-        args                = {}
-        args['account']     = self.get_account('name')
-        args['domainid']    = self.get_domain('id')
-        args['projectid']   = self.get_project('id')
-        args['zoneid']      = self.get_zone('id')
-
-        networks = self.cs.listNetworks(**args)
-        if not networks:
-            self.module.fail_json(msg="No networks available")
-
-        for n in networks['network']:
-            if network in [ n['displaytext'], n['name'], n['id'] ]:
-                return self._get_by_key(key, n)
-                break
-        self.module.fail_json(msg="Network '%s' not found" % network)
-
-
-    #TODO: Merge changes here with parent class
     def get_ip_address(self, key=None):
         if self.ip_address:
             return self._get_by_key(key, self.ip_address)
 
         ip_address = self.module.params.get('ip_address')
-        if not ip_address:
-            self.module.fail_json(msg="IP address param 'ip_address' is required")
-
-        args = {}
-        args['ipaddress'] = ip_address
-        args['account'] = self.get_account(key='name')
-        args['domainid'] = self.get_domain(key='id')
-        args['projectid'] = self.get_project(key='id')
+        args = {
+            'ipaddress': self.module.params.get('ip_address'),
+            'account': self.get_account(key='name'),
+            'domainid': self.get_domain(key='id'),
+            'projectid': self.get_project(key='id'),
+            'vpcid': self.get_vpc(key='id'),
+        }
         ip_addresses = self.cs.listPublicIpAddresses(**args)
 
         if ip_addresses:
             self.ip_address = ip_addresses['publicipaddress'][0]
         return self._get_by_key(key, self.ip_address)
 
-
     def associate_ip_address(self):
         self.result['changed'] = True
-        args = {}
-        args['account'] = self.get_account(key='name')
-        args['domainid'] = self.get_domain(key='id')
-        args['projectid'] = self.get_project(key='id')
-        args['networkid'] = self.get_network(key='id')
-        args['zoneid'] = self.get_zone(key='id')
-        ip_address = {}
+        args = {
+            'account': self.get_account(key='name'),
+            'domainid': self.get_domain(key='id'),
+            'projectid': self.get_project(key='id'),
+            'networkid': self.get_network(key='id'),
+            'zoneid': self.get_zone(key='id'),
+        }
+        ip_address = None
         if not self.module.check_mode:
             res = self.cs.associateIpAddress(**args)
             if 'errortext' in res:
@@ -200,15 +178,13 @@ class AnsibleCloudStackIPAddress(AnsibleCloudStack):
 
             poll_async = self.module.params.get('poll_async')
             if poll_async:
-                res = self._poll_job(res, 'ipaddress')
-            ip_address = res
+                ip_address = self.poll_job(res, 'ipaddress')
         return ip_address
-
 
     def disassociate_ip_address(self):
         ip_address = self.get_ip_address()
-        if ip_address is None:
-            return ip_address
+        if not ip_address:
+            return None
         if ip_address['isstaticnat']:
             self.module.fail_json(msg="IP address is allocated via static nat")
 
@@ -219,7 +195,7 @@ class AnsibleCloudStackIPAddress(AnsibleCloudStack):
                 self.module.fail_json(msg="Failed: '%s'" % res['errortext'])
             poll_async = self.module.params.get('poll_async')
             if poll_async:
-                res = self._poll_job(res, 'ipaddress')
+                self.poll_job(res, 'ipaddress')
         return ip_address
 
 
@@ -228,10 +204,11 @@ def main():
     argument_spec.update(dict(
         ip_address = dict(required=False),
         state = dict(choices=['present', 'absent'], default='present'),
+        vpc = dict(default=None),
+        network = dict(default=None),
         zone = dict(default=None),
         domain = dict(default=None),
         account = dict(default=None),
-        network = dict(default=None),
         project = dict(default=None),
         poll_async = dict(type='bool', default=True),
     ))
@@ -239,11 +216,11 @@ def main():
     module = AnsibleModule(
         argument_spec=argument_spec,
         required_together=cs_required_together(),
+        required_if=[
+            ('state', 'absent', ['ip_address']),
+        ],
         supports_check_mode=True
     )
-
-    if not has_lib_cs:
-        module.fail_json(msg="python library cs required: pip install cs")
 
     try:
         acs_ip_address = AnsibleCloudStackIPAddress(module)

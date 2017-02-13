@@ -18,6 +18,10 @@
 
 """An Ansible module to utilize GCE image resources."""
 
+ANSIBLE_METADATA = {'status': ['preview'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 ---
 module: gce_img
@@ -38,6 +42,12 @@ options:
       - an optional description
     required: false
     default: null
+  family:
+    description:
+      - an optional family name
+    required: false
+    default: null
+    version_added: "2.2"
   source:
     description:
       - the source disk or the Google Cloud Storage URI to create the image from
@@ -78,7 +88,7 @@ options:
 requirements:
     - "python >= 2.6"
     - "apache-libcloud"
-author: "Peter Tan (@tanpeter)"
+author: "Tom Melendez (supertom)"
 '''
 
 EXAMPLES = '''
@@ -105,9 +115,9 @@ EXAMPLES = '''
     state: absent
 '''
 
-import sys
 
 try:
+  import libcloud
   from libcloud.compute.types import Provider
   from libcloud.compute.providers import get_driver
   from libcloud.common.google import GoogleBaseError
@@ -117,6 +127,9 @@ try:
   has_libcloud = True
 except ImportError:
   has_libcloud = False
+
+from ansible.module_utils.basic import AnsibleModule
+from ansible.module_utils.gce import gce_connect
 
 
 GCS_URI = 'https://storage.googleapis.com/'
@@ -128,6 +141,7 @@ def create_image(gce, name, module):
   zone = module.params.get('zone')
   desc = module.params.get('description')
   timeout = module.params.get('timeout')
+  family = module.params.get('family')
 
   if not source:
     module.fail_json(msg='Must supply a source', changed=False)
@@ -144,17 +158,21 @@ def create_image(gce, name, module):
     except ResourceNotFoundError:
       module.fail_json(msg='Disk %s not found in zone %s' % (source, zone),
                        changed=False)
-    except GoogleBaseError, e:
+    except GoogleBaseError as e:
       module.fail_json(msg=str(e), changed=False)
+
+  gce_extra_args = {}
+  if family is not None:
+    gce_extra_args['family'] = family
 
   old_timeout = gce.connection.timeout
   try:
     gce.connection.timeout = timeout
-    gce.ex_create_image(name, volume, desc, False)
+    gce.ex_create_image(name, volume, desc, use_existing=False, **gce_extra_args)
     return True
   except ResourceExistsError:
     return False
-  except GoogleBaseError, e:
+  except GoogleBaseError as e:
     module.fail_json(msg=str(e), changed=False)
   finally:
     gce.connection.timeout = old_timeout
@@ -167,7 +185,7 @@ def delete_image(gce, name, module):
     return True
   except ResourceNotFoundError:
     return False
-  except GoogleBaseError, e:
+  except GoogleBaseError as e:
     module.fail_json(msg=str(e), changed=False)
 
 
@@ -175,6 +193,7 @@ def main():
   module = AnsibleModule(
       argument_spec=dict(
           name=dict(required=True),
+          family=dict(),
           description=dict(),
           source=dict(),
           state=dict(default='present', choices=['present', 'absent']),
@@ -193,7 +212,12 @@ def main():
 
   name = module.params.get('name')
   state = module.params.get('state')
+  family = module.params.get('family')
   changed = False
+
+  if family is not None and hasattr(libcloud, '__version__') and libcloud.__version__ <= '0.20.1':
+    module.fail_json(msg="Apache Libcloud 1.0.0+ is required to use 'family' option",
+                     changed=False)
 
   # user wants to create an image.
   if state == 'present':
@@ -205,8 +229,5 @@ def main():
 
   module.exit_json(changed=changed, name=name)
 
-# import module snippets
-from ansible.module_utils.basic import *
-from ansible.module_utils.gce import *
-
-main()
+if __name__ == '__main__':
+    main()

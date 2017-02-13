@@ -14,9 +14,13 @@
 # You should have received a copy of the GNU General Public License
 # along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
 
+ANSIBLE_METADATA = {'status': ['preview'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 ---
-module: SoftLayer
+module: sl_vm
 short_description: create or cancel a virtual instance in SoftLayer
 description:
   - Creates or cancels SoftLayer instances. When created, optionally waits for it to be 'running'.
@@ -205,9 +209,9 @@ import time
 
 #TODO: get this info from API
 STATES = ['present', 'absent']
-DATACENTERS = ['ams01','ams03','dal01','dal05','dal06','dal09','fra02','hkg02','hou02','lon2','mel01','mex01','mil01','mon01','par01','sjc01','sjc03','sao01','sea01','sng01','syd01','tok02','tor01','wdc01','wdc04']
-CPU_SIZES = [1,2,4,8,16]
-MEMORY_SIZES = [1024,2048,4096,6144,8192,12288,16384,32768,49152,65536]
+DATACENTERS = ['ams01','ams03','che01','dal01','dal05','dal06','dal09','dal10','fra02','hkg02','hou02','lon02','mel01','mex01','mil01','mon01','osl01','par01','sjc01','sjc03','sao01','sea01','sng01','syd01','tok02','tor01','wdc01','wdc04']
+CPU_SIZES = [1,2,4,8,16,32,56]
+MEMORY_SIZES = [1024,2048,4096,6144,8192,12288,16384,32768,49152,65536,131072,247808]
 INITIALDISK_SIZES = [25,100]
 LOCALDISK_SIZES = [25,100,150,200,300]
 SANDISK_SIZES = [10,20,25,30,40,50,75,100,125,150,175,200,250,300,350,400,500,750,1000,1500,2000]
@@ -224,6 +228,16 @@ except ImportError:
 
 
 def create_virtual_instance(module):
+
+  instances = vsManager.list_instances(
+    hostname = module.params.get('hostname'),
+    domain = module.params.get('domain'),
+    datacenter = module.params.get('datacenter')
+  )
+
+  if instances:
+    return False, None
+
 
   # Check if OS or Image Template is provided (Can't be both, defaults to OS)
   if (module.params.get('os_code') != None and module.params.get('os_code') != ''):
@@ -298,11 +312,12 @@ def cancel_instance(module):
       canceled = False
   else:
     return False, None
-  
+
   return canceled, None
 
 
 def main():
+
   module = AnsibleModule(
     argument_spec=dict(
       instance_id=dict(),
@@ -338,7 +353,7 @@ def main():
 
   elif module.params.get('state') == 'present':
       (changed, instance) = create_virtual_instance(module)
-      if module.params.get('wait') == True:
+      if module.params.get('wait') == True and instance:
         (changed, instance) = wait_for_instance(module, instance['id'])
 
   module.exit_json(changed=changed, instance=json.loads(json.dumps(instance, default=lambda o: o.__dict__)))

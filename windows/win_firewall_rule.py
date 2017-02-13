@@ -17,6 +17,10 @@
 # You should have received a copy of the GNU General Public License
 # along with Ansible. If not, see <http://www.gnu.org/licenses/>.
 
+ANSIBLE_METADATA = {'status': ['preview'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 ---
 module: win_firewall_rule
@@ -29,9 +33,8 @@ options:
     enable:
         description:
             - is this firewall rule enabled or disabled
-        default: null
+        default: true
         required: false
-        choices: ['yes', 'no']
     state:
         description:
             - should this rule be added or removed
@@ -48,13 +51,13 @@ options:
             - is this rule for inbound or outbound trafic
         default: null
         required: true
-        choices: [ 'In', 'Out' ]
+        choices: ['in', 'out']
     action:
         description:
             - what to do with the items this rule is for
         default: null
         required: true
-        choices: [ 'allow', 'block' ]
+        choices: ['allow', 'block', 'bypass']
     description:
         description:
             - description for the firewall rule
@@ -63,22 +66,22 @@ options:
     localip:
         description:
             - the local ip address this rule applies to
-        default: null
+        default: 'any'
         required: false
     remoteip:
         description:
             - the remote ip address/range this rule applies to
-        default: null
+        default: 'any'
         required: false
     localport:
         description:
             - the local port this rule applies to
-        default: null
+        default: 'any'
         required: false
     remoteport:
         description:
             - the remote port this rule applies to
-        default: null
+        default: 'any'
         required: false
     program:
         description:
@@ -88,17 +91,17 @@ options:
     service:
         description:
             - the service this rule applies to
-        default: null
+        default: 'any'
         required: false
     protocol:
         description:
             - the protocol this rule applies to
-        default: null
+        default: 'any'
         required: false
     profile:
         description:
-            - the profile this rule applies to
-        default: null
+            - the profile this rule applies to, e.g. Domain,Private,Public
+        default: 'any'
         required: false
     force:
         description:

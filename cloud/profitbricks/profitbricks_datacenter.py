@@ -14,6 +14,10 @@
 # You should have received a copy of the GNU General Public License
 # along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
 
+ANSIBLE_METADATA = {'status': ['preview'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 ---
 module: profitbricks_datacenter
@@ -35,7 +39,7 @@ options:
       - The datacenter location.
     required: false
     default: us/las
-    choices: [ "us/las", "us/lasdev", "de/fra", "de/fkb" ]
+    choices: [ "us/las", "de/fra", "de/fkb" ]
   subscription_user:
     description:
       - The ProfitBricks username. Overrides the PB_SUBSCRIPTION_ID environement variable.
@@ -94,8 +98,7 @@ except ImportError:
 
 LOCATIONS = ['us/las',
              'de/fra',
-             'de/fkb',
-             'us/lasdev']
+             'de/fkb']
 
 uuid_match = re.compile(
     '[\w]{8}-[\w]{4}-[\w]{4}-[\w]{4}-[\w]{12}', re.I)
@@ -206,7 +209,7 @@ def main():
         argument_spec=dict(
             name=dict(),
             description=dict(),
-            location=dict(choices=LOCATIONS, default='us/lasdev'),
+            location=dict(choices=LOCATIONS, default='us/las'),
             subscription_user=dict(),
             subscription_password=dict(),
             wait=dict(type='bool', default=True),
@@ -256,4 +259,5 @@ def main():
 
 from ansible.module_utils.basic import *
 
-main()
+if __name__ == '__main__':
+    main()

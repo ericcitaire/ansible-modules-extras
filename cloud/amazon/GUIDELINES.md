@@ -178,6 +178,8 @@ except BotoServerError, e:
 
 For more information on botocore exception handling see [http://botocore.readthedocs.org/en/latest/client_upgrades.html#error-handling]
 
+Boto3 provides lots of useful info when an exception is thrown so pass this to the user along with the message.
+
 ```python
 # Import ClientError from botocore
 try:
@@ -193,7 +195,42 @@ except ImportError:
 try:
     result = connection.aws_call()
 except ClientError, e:
-    module.fail_json(msg=e.message)
+    module.fail_json(msg=e.message, **camel_dict_to_snake_dict(e.response))
+```
+
+If you need to perform an action based on the error boto3 returned, use the error code.
+
+```python
+# Make a call to AWS
+try:
+    result = connection.aws_call()
+except ClientError, e:
+    if e.response['Error']['Code'] == 'NoSuchEntity':
+        return None
+    else:
+        module.fail_json(msg=e.message, **camel_dict_to_snake_dict(e.response))
+```
+
+### Returning Values
+
+When you make a call using boto3, you will probably get back some useful information that you should return in the module.
+
+As well as information related to the call itself, you will also have some response metadata.  It is OK to return this to
+the user as well as they may find it useful.
+
+Boto3 returns all values CamelCased.  Ansible follows Python standards for variable names and uses snake_case. There is a
+helper function in module_utils/ec2.py called `camel_dict_to_snake_dict` that allows you to easily convert the boto3
+response to snake_case.
+
+You should use this helper function and avoid changing the names of values returned by Boto3.  E.g. if boto3 returns a
+value called 'SecretAccessKey' do not change it to 'AccessKey'.
+
+```python
+# Make a call to AWS
+result = connection.aws_call()
+
+# Return the result to the user
+module.exit_json(changed=True, **camel_dict_to_snake_dict(result))
 ```
 
 ### Helper functions
@@ -220,3 +257,8 @@ key and the dict value is the tag value.
 
 Opposite of above. Converts an Ansible dict to a boto3 tag list of dicts.
 
+#### get_ec2_security_group_ids_from_names
+
+Pass this function a list of security group names or combination of security group names and IDs and this function will
+return a list of IDs.  You should also pass the VPC ID if known because security group names are not necessarily unique
+across VPCs.

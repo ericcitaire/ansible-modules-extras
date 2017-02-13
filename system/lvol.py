@@ -18,6 +18,10 @@
 # You should have received a copy of the GNU General Public License
 # along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
 
+ANSIBLE_METADATA = {'status': ['preview'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 ---
 author:
@@ -48,8 +52,15 @@ options:
     choices: [ "present", "absent" ]
     default: present
     description:
-    - Control if the logical volume exists. If C(present) the C(size) option
-      is required.
+    - Control if the logical volume exists. If C(present) and the
+      volume does not already exist then the C(size) option is required.
+    required: false
+  active:
+    version_added: "2.2"
+    choices: [ "yes", "no" ]
+    default: "yes"
+    description:
+    - Whether the volume is activate and visible to the host.
     required: false
   force:
     version_added: "1.5"
@@ -73,49 +84,121 @@ options:
     description:
     - Comma separated list of physical volumes e.g. /dev/sda,/dev/sdb
     required: false
+  shrink:
+    version_added: "2.2"
+    description:
+    - shrink if current size is higher than size requested
+    required: false
+    default: yes
 notes:
   - Filesystems on top of the volume are not resized.
 '''
 
 EXAMPLES = '''
 # Create a logical volume of 512m.
-- lvol: vg=firefly lv=test size=512
+- lvol:
+    vg: firefly
+    lv: test
+    size: 512
 
 # Create a logical volume of 512m with disks /dev/sda and /dev/sdb
-- lvol: vg=firefly lv=test size=512 pvs=/dev/sda,/dev/sdb
+- lvol:
+    vg: firefly
+    lv: test
+    size: 512
+    pvs: /dev/sda,/dev/sdb
 
 # Create cache pool logical volume
-- lvol: vg=firefly lv=lvcache size=512m opts='--type cache-pool'
+- lvol:
+    vg: firefly
+    lv: lvcache
+    size: 512m
+    opts: --type cache-pool
 
 # Create a logical volume of 512g.
-- lvol: vg=firefly lv=test size=512g
+- lvol:
+    vg: firefly
+    lv: test
+    size: 512g
 
 # Create a logical volume the size of all remaining space in the volume group
-- lvol: vg=firefly lv=test size=100%FREE
+- lvol:
+    vg: firefly
+    lv: test
+    size: 100%FREE
 
 # Create a logical volume with special options
-- lvol: vg=firefly lv=test size=512g opts="-r 16"
+- lvol:
+    vg: firefly
+    lv: test
+    size: 512g
+    opts: -r 16
 
 # Extend the logical volume to 1024m.
-- lvol: vg=firefly lv=test size=1024
+- lvol:
+    vg: firefly
+    lv: test
+    size: 1024
 
 # Extend the logical volume to consume all remaining space in the volume group
-- lvol: vg=firefly lv=test size=+100%FREE
+- lvol:
+    vg: firefly
+    lv: test
+    size: +100%FREE
 
 # Extend the logical volume to take all remaining space of the PVs
-- lvol: vg=firefly lv=test size=100%PVS
+- lvol:
+    vg: firefly
+    lv: test
+    size: 100%PVS
 
 # Resize the logical volume to % of VG
-- lvol: vg-firefly lv=test size=80%VG force=yes
+- lvol:
+    vg: firefly
+    lv: test
+    size: 80%VG
+    force: yes
 
 # Reduce the logical volume to 512m
-- lvol: vg=firefly lv=test size=512 force=yes
+- lvol:
+    vg: firefly
+    lv: test
+    size: 512
+    force: yes
+
+# Set the logical volume to 512m and do not try to shrink if size is lower than current one
+- lvol:
+    vg: firefly
+    lv: test
+    size: 512
+    shrink: no
 
 # Remove the logical volume.
-- lvol: vg=firefly lv=test state=absent force=yes
+- lvol:
+    vg: firefly
+    lv: test
+    state: absent
+    force: yes
 
 # Create a snapshot volume of the test logical volume.
-- lvol: vg=firefly lv=test snapshot=snap1 size=100m
+- lvol:
+    vg: firefly
+    lv: test
+    snapshot: snap1
+    size: 100m
+
+# Deactivate a logical volume
+- lvol:
+    vg: firefly
+    lv: test
+    active: false
+
+# Create a deactivated logical volume
+- lvol:
+    vg: firefly
+    lv: test
+    size: 512g
+    active: false
 '''
 
 import re
@@ -131,7 +214,8 @@ def parse_lvs(data):
         parts = line.strip().split(';')
         lvs.append({
             'name': parts[0].replace('[','').replace(']',''),
-            'size': int(decimal_point.match(parts[1]).group(1))
+            'size': int(decimal_point.match(parts[1]).group(1)),
+            'active': (parts[2][4] == 'a')
         })
     return lvs
 
@@ -168,6 +252,8 @@ def main():
             opts=dict(type='str'),
             state=dict(choices=["absent", "present"], default='present'),
             force=dict(type='bool', default='no'),
+            shrink=dict(type='bool', default='yes'),
+            active=dict(type='bool', default='yes'),
             snapshot=dict(type='str', default=None),
             pvs=dict(type='str')
         ),
@@ -190,6 +276,8 @@ def main():
     opts = module.params['opts']
     state = module.params['state']
     force = module.boolean(module.params['force'])
+    shrink = module.boolean(module.params['shrink'])
+    active = module.boolean(module.params['active'])
     size_opt = 'L'
     size_unit = 'm'
     snapshot = module.params['snapshot']
@@ -202,6 +290,12 @@ def main():
 
     if opts is None:
         opts = ""
+
+    # Add --test option when running in check-mode
+    if module.check_mode:
+        test_opt = ' --test'
+    else:
+        test_opt = ''
 
     if size:
         # LVCREATE(8) -l --extents option with percentage
@@ -243,7 +337,7 @@ def main():
 
     if rc != 0:
         if state == 'absent':
-            module.exit_json(changed=False, stdout="Volume group %s does not exist." % vg, stderr=False)
+            module.exit_json(changed=False, stdout="Volume group %s does not exist." % vg)
         else:
             module.fail_json(msg="Volume group %s does not exist." % vg, rc=rc, err=err)
 
@@ -253,11 +347,11 @@ def main():
     # Get information on logical volume requested
     lvs_cmd = module.get_bin_path("lvs", required=True)
     rc, current_lvs, err = module.run_command(
-        "%s -a --noheadings --nosuffix -o lv_name,size --units %s --separator ';' %s" % (lvs_cmd, unit, vg))
+        "%s -a --noheadings --nosuffix -o lv_name,size,lv_attr --units %s --separator ';' %s" % (lvs_cmd, unit, vg))
 
     if rc != 0:
         if state == 'absent':
-            module.exit_json(changed=False, stdout="Volume group %s does not exist." % vg, stderr=False)
+            module.exit_json(changed=False, stdout="Volume group %s does not exist." % vg)
         else:
             module.fail_json(msg="Volume group %s does not exist." % vg, rc=rc, err=err)
 
@@ -279,39 +373,35 @@ def main():
     if state == 'present' and not size:
         if this_lv is None:
             module.fail_json(msg="No size given.")
-        else:
-            module.exit_json(changed=False, vg=vg, lv=this_lv['name'], size=this_lv['size'])
 
     msg = ''
     if this_lv is None:
         if state == 'present':
             ### create LV
-            if module.check_mode:
+            lvcreate_cmd = module.get_bin_path("lvcreate", required=True)
+            if snapshot is not None:
+                cmd = "%s %s %s -%s %s%s -s -n %s %s %s/%s" % (lvcreate_cmd, test_opt, yesopt, size_opt, size, size_unit, snapshot, opts, vg, lv)
+            else:
+                cmd = "%s %s %s -n %s -%s %s%s %s %s %s" % (lvcreate_cmd, test_opt, yesopt, lv, size_opt, size, size_unit, opts, vg, pvs)
+            rc, _, err = module.run_command(cmd)
+            if rc == 0:
                 changed = True
             else:
-                lvcreate_cmd = module.get_bin_path("lvcreate", required=True)
-                if snapshot is not None:
-                    cmd = "%s %s -%s %s%s -s -n %s %s %s/%s" % (lvcreate_cmd, yesopt, size_opt, size, size_unit, snapshot, opts, vg, lv)
-                else:
-                    cmd = "%s %s -n %s -%s %s%s %s %s %s" % (lvcreate_cmd, yesopt, lv, size_opt, size, size_unit, opts, vg, pvs)
-                rc, _, err = module.run_command(cmd)
-                if rc == 0:
-                    changed = True
-                else:
-                    module.fail_json(msg="Creating logical volume '%s' failed" % lv, rc=rc, err=err)
+                module.fail_json(msg="Creating logical volume '%s' failed" % lv, rc=rc, err=err)
     else:
         if state == 'absent':
             ### remove LV
-            if module.check_mode:
-                module.exit_json(changed=True)
             if not force:
                 module.fail_json(msg="Sorry, no removal of logical volume %s without force=yes." % (this_lv['name']))
             lvremove_cmd = module.get_bin_path("lvremove", required=True)
-            rc, _, err = module.run_command("%s --force %s/%s" % (lvremove_cmd, vg, this_lv['name']))
+            rc, _, err = module.run_command("%s %s --force %s/%s" % (lvremove_cmd, test_opt, vg, this_lv['name']))
             if rc == 0:
                 module.exit_json(changed=True)
             else:
                 module.fail_json(msg="Failed to remove logical volume %s" % (lv), rc=rc, err=err)
+
+        elif not size:
+            pass
 
         elif size_opt == 'l':
             ### Resize LV based on % value
@@ -328,7 +418,7 @@ def main():
                     tool = module.get_bin_path("lvextend", required=True)
                 else:
                     module.fail_json(msg="Logical Volume %s could not be extended. Not enough free space left (%s%s required / %s%s available)" % (this_lv['name'], (size_requested -  this_lv['size']), unit, size_free, unit))
-            elif this_lv['size'] > size_requested + this_vg['ext_size']:  # more than an extent too large
+            elif shrink and this_lv['size'] > size_requested + this_vg['ext_size']:  # more than an extent too large
                 if size_requested == 0:
                     module.fail_json(msg="Sorry, no shrinking of %s to 0 permitted." % (this_lv['name']))
                 elif not force:
@@ -338,27 +428,26 @@ def main():
                     tool = '%s %s' % (tool, '--force')
 
             if tool:
-                if module.check_mode:
+                cmd = "%s %s -%s %s%s %s/%s %s" % (tool, test_opt, size_opt, size, size_unit, vg, this_lv['name'], pvs)
+                rc, out, err = module.run_command(cmd)
+                if "Reached maximum COW size" in out:
+                    module.fail_json(msg="Unable to resize %s to %s%s" % (lv, size, size_unit), rc=rc, err=err, out=out)
+                elif rc == 0:
                     changed = True
+                    msg="Volume %s resized to %s%s" % (this_lv['name'], size_requested, unit)
+                elif "matches existing size" in err:
+                    module.exit_json(changed=False, vg=vg, lv=this_lv['name'], size=this_lv['size'])
+                elif "not larger than existing size" in err:
+                    module.exit_json(changed=False, vg=vg, lv=this_lv['name'], size=this_lv['size'], msg="Original size is larger than requested size", err=err)
                 else:
-                    cmd = "%s -%s %s%s %s/%s %s" % (tool, size_opt, size, size_unit, vg, this_lv['name'], pvs)
-                    rc, out, err = module.run_command(cmd)
-                    if "Reached maximum COW size" in out:
-                        module.fail_json(msg="Unable to resize %s to %s%s" % (lv, size, size_unit), rc=rc, err=err, out=out)
-                    elif rc == 0:
-                        changed = True
-                        msg="Volume %s resized to %s%s" % (this_lv['name'], size_requested, unit)
-                    elif "matches existing size" in err:
-                        module.exit_json(changed=False, vg=vg, lv=this_lv['name'], size=this_lv['size'])
-                    else:
-                        module.fail_json(msg="Unable to resize %s to %s%s" % (lv, size, size_unit), rc=rc, err=err)
+                    module.fail_json(msg="Unable to resize %s to %s%s" % (lv, size, size_unit), rc=rc, err=err)
 
         else:
             ### resize LV based on absolute values
             tool = None
             if int(size) > this_lv['size']:
                 tool = module.get_bin_path("lvextend", required=True)
-            elif int(size) < this_lv['size']:
+            elif shrink and int(size) < this_lv['size']:
                 if int(size) == 0:
                     module.fail_json(msg="Sorry, no shrinking of %s to 0 permitted." % (this_lv['name']))
                 if not force:
@@ -368,19 +457,34 @@ def main():
                     tool = '%s %s' % (tool, '--force')
 
             if tool:
-                if module.check_mode:
+                cmd = "%s %s -%s %s%s %s/%s %s" % (tool, test_opt, size_opt, size, size_unit, vg, this_lv['name'], pvs)
+                rc, out, err = module.run_command(cmd)
+                if "Reached maximum COW size" in out:
+                    module.fail_json(msg="Unable to resize %s to %s%s" % (lv, size, size_unit), rc=rc, err=err, out=out)
+                elif rc == 0:
                     changed = True
+                elif "matches existing size" in err:
+                    module.exit_json(changed=False, vg=vg, lv=this_lv['name'], size=this_lv['size'])
+                elif "not larger than existing size" in err:
+                    module.exit_json(changed=False, vg=vg, lv=this_lv['name'], size=this_lv['size'], msg="Original size is larger than requested size", err=err)
                 else:
-                    cmd = "%s -%s %s%s %s/%s %s" % (tool, size_opt, size, size_unit, vg, this_lv['name'], pvs)
-                    rc, out, err = module.run_command(cmd)
-                    if "Reached maximum COW size" in out:
-                        module.fail_json(msg="Unable to resize %s to %s%s" % (lv, size, size_unit), rc=rc, err=err, out=out)
-                    elif rc == 0:
-                        changed = True
-                    elif "matches existing size" in err:
-                        module.exit_json(changed=False, vg=vg, lv=this_lv['name'], size=this_lv['size'])
-                    else:
-                        module.fail_json(msg="Unable to resize %s to %s%s" % (lv, size, size_unit), rc=rc, err=err)
+                    module.fail_json(msg="Unable to resize %s to %s%s" % (lv, size, size_unit), rc=rc, err=err)
+
+    if this_lv is not None:
+        if active:
+            lvchange_cmd = module.get_bin_path("lvchange", required=True)
+            rc, _, err = module.run_command("%s -ay %s/%s" % (lvchange_cmd, vg, this_lv['name']))
+            if rc == 0:
+                module.exit_json(changed=((not this_lv['active']) or changed), vg=vg, lv=this_lv['name'], size=this_lv['size'])
+            else:
+                module.fail_json(msg="Failed to activate logical volume %s" % (lv), rc=rc, err=err)
+        else:
+            lvchange_cmd = module.get_bin_path("lvchange", required=True)
+            rc, _, err = module.run_command("%s -an %s/%s" % (lvchange_cmd, vg, this_lv['name']))
+            if rc == 0:
+                module.exit_json(changed=(this_lv['active'] or changed), vg=vg, lv=this_lv['name'], size=this_lv['size'])
+            else:
+                module.fail_json(msg="Failed to deactivate logical volume %s" % (lv), rc=rc, err=err)
 
     module.exit_json(changed=changed, msg=msg)
 

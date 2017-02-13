@@ -21,6 +21,10 @@
 # this is a windows documentation stub.  actual code lives in the .ps1
 # file of the same name
 
+ANSIBLE_METADATA = {'status': ['preview'],
+                    'supported_by': 'core',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 ---
 module: win_regedit
@@ -126,6 +130,12 @@ EXAMPLES = '''
     key: HKCU:\Software\MyCompany
     value: hello
     state: absent
+
+  # Ensure registry paths containing spaces are quoted.
+  # Creates Registry Key called 'My Company'.
+  win_regedit:
+    key: 'HKCU:\Software\My Company'
+
 '''
 RETURN = '''
 data_changed:

@@ -14,23 +14,27 @@
 # You should have received a copy of the GNU General Public License
 # along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
 
+ANSIBLE_METADATA = {'status': ['preview'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 ---
 module: dnsmadeeasy
 version_added: "1.3"
 short_description: Interface with dnsmadeeasy.com (a DNS hosting service).
 description:
-   - "Manages DNS records via the v2 REST API of the DNS Made Easy service.  It handles records only; there is no manipulation of domains or monitor/account support yet. See: U(http://www.dnsmadeeasy.com/services/rest-api/)"
+   - "Manages DNS records via the v2 REST API of the DNS Made Easy service.  It handles records only; there is no manipulation of domains or monitor/account support yet. See: U(https://www.dnsmadeeasy.com/integration/restapi/)"
 options:
   account_key:
     description:
-      - Accout API Key.
+      - Account API Key.
     required: true
     default: null
     
   account_secret:
     description:
-      - Accout Secret Key.
+      - Account Secret Key.
     required: true
     default: null
     
@@ -92,21 +96,48 @@ author: "Brice Burgess (@briceburg)"
 
 EXAMPLES = '''
 # fetch my.com domain records
-- dnsmadeeasy: account_key=key account_secret=secret domain=my.com state=present
+- dnsmadeeasy:
+    account_key: key
+    account_secret: secret
+    domain: my.com
+    state: present
   register: response
   
 # create / ensure the presence of a record
-- dnsmadeeasy: account_key=key account_secret=secret domain=my.com state=present record_name="test" record_type="A" record_value="127.0.0.1"
+- dnsmadeeasy:
+    account_key: key
+    account_secret: secret
+    domain: my.com
+    state: present
+    record_name: test
+    record_type: A
+    record_value: 127.0.0.1
 
 # update the previously created record
-- dnsmadeeasy: account_key=key account_secret=secret domain=my.com state=present record_name="test" record_value="192.168.0.1"
+- dnsmadeeasy:
+    account_key: key
+    account_secret: secret
+    domain: my.com
+    state: present
+    record_name: test
+    record_value: 192.0.2.23
 
 # fetch a specific record
-- dnsmadeeasy: account_key=key account_secret=secret domain=my.com state=present record_name="test"
+- dnsmadeeasy:
+    account_key: key
+    account_secret: secret
+    domain: my.com
+    state: present
+    record_name: test
   register: response
   
 # delete a record / ensure it is absent
-- dnsmadeeasy: account_key=key account_secret=secret domain=my.com state=absent record_name="test"
+- dnsmadeeasy:
+    account_key: key
+    account_secret: secret
+    domain: my.com
+    state: absent
+    record_name: test
 '''
 
 # ============================================
@@ -121,7 +152,8 @@ try:
     from time import strftime, gmtime
     import hashlib
     import hmac
-except ImportError, e:
+except ImportError:
+    e = get_exception()
     IMPORT_ERROR = str(e)
 
 class DME2:
@@ -170,7 +202,7 @@ class DME2:
 
         try:
             return json.load(response)
-        except Exception, e:
+        except Exception:
             return {}
 
     def getDomain(self, domain_id):
@@ -365,4 +397,5 @@ def main():
 from ansible.module_utils.basic import *
 from ansible.module_utils.urls import *
 
-main()
+if __name__ == '__main__':
+    main()

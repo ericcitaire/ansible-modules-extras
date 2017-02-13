@@ -18,6 +18,10 @@
 # You should have received a copy of the GNU General Public License
 # along with Ansible.  If not, see <http://www.gnu.org/licenses/>
 
+ANSIBLE_METADATA = {'status': ['stableinterface'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 ---
 module: svc
@@ -67,26 +71,41 @@ options:
 
 EXAMPLES = '''
 # Example action to start svc dnscache, if not running
- - svc: name=dnscache state=started
+ - svc:
+    name: dnscache
+    state: started
 
 # Example action to stop svc dnscache, if running
- - svc: name=dnscache state=stopped
+ - svc:
+    name: dnscache
+    state: stopped
 
 # Example action to kill svc dnscache, in all cases
- - svc : name=dnscache state=killed
+ - svc:
+    name: dnscache
+    state: killed
 
 # Example action to restart svc dnscache, in all cases
- - svc : name=dnscache state=restarted
+ - svc:
+    name: dnscache
+    state: restarted
 
 # Example action to reload svc dnscache, in all cases
- - svc: name=dnscache state=reloaded
+ - svc:
+    name: dnscache
+    state: reloaded
 
 # Example using alt svc directory location
- - svc: name=dnscache state=reloaded service_dir=/var/service
+ - svc:
+    name: dnscache
+    state: reloaded
+    service_dir: /var/service
 '''
 
 import platform
 import shlex
+from ansible.module_utils.pycompat24 import get_exception
+from ansible.module_utils.basic import *
 
 def _load_dist_subclass(cls, *args, **kwargs):
     '''
@@ -152,7 +171,8 @@ class Svc(object):
         if os.path.exists(self.src_full):
             try:
                 os.symlink(self.src_full, self.svc_full)
-            except OSError, e:
+            except OSError:
+                e = get_exception()
                 self.module.fail_json(path=self.src_full, msg='Error while linking: %s' % str(e))
         else:
             self.module.fail_json(msg="Could not find source for service to enable (%s)." % self.src_full)
@@ -160,7 +180,8 @@ class Svc(object):
     def disable(self):
         try:
             os.unlink(self.svc_full)
-        except OSError, e:
+        except OSError:
+            e = get_exception()
             self.module.fail_json(path=self.svc_full, msg='Error while unlinking: %s' % str(e))
         self.execute_command([self.svc_cmd,'-dx',self.src_full])
 
@@ -221,7 +242,8 @@ class Svc(object):
     def execute_command(self, cmd):
         try:
             (rc, out, err) = self.module.run_command(' '.join(cmd))
-        except Exception, e:
+        except Exception:
+            e = get_exception()
             self.module.fail_json(msg="failed to execute: %s" % str(e))
         return (rc, out, err)
 
@@ -267,7 +289,8 @@ def main():
                     svc.enable()
                 else:
                     svc.disable()
-            except (OSError, IOError), e:
+            except (OSError, IOError):
+                e = get_exception()
                 module.fail_json(msg="Could change service link: %s" % str(e))
 
     if state is not None and state != svc.state:
@@ -284,13 +307,14 @@ def main():
                     open(d_file, "a").close()
                 else:
                     os.unlink(d_file)
-            except (OSError, IOError), e:
+            except (OSError, IOError):
+                e = get_exception()
                 module.fail_json(msg="Could change downed file: %s " % (str(e)))
 
     module.exit_json(changed=changed, svc=svc.report())
 
 
-# this is magic,  not normal python include
-from ansible.module_utils.basic import *
 
-main()
+
+if __name__ == '__main__':
+    main()

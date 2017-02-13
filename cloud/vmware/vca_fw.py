@@ -18,6 +18,10 @@
 # along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
 
 
+ANSIBLE_METADATA = {'status': ['preview'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 ---
 module: vca_fw
@@ -49,12 +53,12 @@ EXAMPLES = '''
        fw_rules:
          - description: "ben testing"
            source_ip: "Any"
-           dest_ip: 192.168.2.11
+           dest_ip: 192.0.2.23
          - description: "ben testing 2"
-           source_ip: 192.168.2.100
+           source_ip: 192.0.2.50
            source_port: "Any"
            dest_port: "22"
-           dest_ip: 192.168.2.13
+           dest_ip: 192.0.2.101
            is_enable: "true"
            enable_logging: "false"
            protocol: "Tcp"
@@ -184,7 +188,7 @@ def main():
 
     try:
         desired_rules = validate_fw_rules(fw_rules)
-    except VcaError, e:
+    except VcaError as e:
         module.fail_json(msg=e.message)
 
     result = dict(changed=False)

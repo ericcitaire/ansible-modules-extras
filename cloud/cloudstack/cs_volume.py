@@ -19,6 +19,10 @@
 # You should have received a copy of the GNU General Public License
 # along with Ansible. If not, see <http://www.gnu.org/licenses/>.
 
+ANSIBLE_METADATA = {'status': ['stableinterface'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 ---
 module: cs_volume
@@ -230,12 +234,6 @@ device_id:
   sample: 1
 '''
 
-try:
-    from cs import CloudStack, CloudStackException, read_config
-    has_lib_cs = True
-except ImportError:
-    has_lib_cs = False
-
 # import cloudstack common
 from ansible.module_utils.cloudstack import *
 
@@ -345,27 +343,28 @@ class AnsibleCloudStackVolume(AnsibleCloudStack):
     def attached_volume(self):
         volume = self.present_volume()
 
-        if volume.get('virtualmachineid') != self.get_vm(key='id'):
-            self.result['changed'] = True
+        if volume:
+            if volume.get('virtualmachineid') != self.get_vm(key='id'):
+                self.result['changed'] = True
 
-            if not self.module.check_mode:
-                volume = self.detached_volume()
+                if not self.module.check_mode:
+                    volume = self.detached_volume()
 
-        if 'attached' not in volume:
-            self.result['changed'] = True
+            if 'attached' not in volume:
+                self.result['changed'] = True
 
-            args = {}
-            args['id'] = volume['id']
-            args['virtualmachineid'] = self.get_vm(key='id')
-            args['deviceid'] = self.module.params.get('device_id')
+                args = {}
+                args['id'] = volume['id']
+                args['virtualmachineid'] = self.get_vm(key='id')
+                args['deviceid'] = self.module.params.get('device_id')
 
-            if not self.module.check_mode:
-                res = self.cs.attachVolume(**args)
-                if 'errortext' in res:
-                    self.module.fail_json(msg="Failed: '%s'" % res['errortext'])
-                poll_async = self.module.params.get('poll_async')
-                if poll_async:
-                    volume = self.poll_job(res, 'volume')
+                if not self.module.check_mode:
+                    res = self.cs.attachVolume(**args)
+                    if 'errortext' in res:
+                        self.module.fail_json(msg="Failed: '%s'" % res['errortext'])
+                    poll_async = self.module.params.get('poll_async')
+                    if poll_async:
+                        volume = self.poll_job(res, 'volume')
         return volume
 
 
@@ -392,7 +391,7 @@ class AnsibleCloudStackVolume(AnsibleCloudStack):
         volume = self.get_volume()
 
         if volume:
-            if 'attached' in volume and not self.module.param.get('force'):
+            if 'attached' in volume and not self.module.params.get('force'):
                 self.module.fail_json(msg="Volume '%s' is attached, use force=true for detaching and removing the volume." % volume.get('name'))
 
             self.result['changed'] = True
@@ -468,9 +467,6 @@ def main():
         ),
         supports_check_mode=True
     )
-
-    if not has_lib_cs:
-        module.fail_json(msg="python library cs required: pip install cs")
 
     try:
         acs_vol = AnsibleCloudStackVolume(module)

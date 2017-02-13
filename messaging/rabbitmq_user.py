@@ -18,6 +18,10 @@
 # You should have received a copy of the GNU General Public License
 # along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
 
+ANSIBLE_METADATA = {'status': ['preview'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 ---
 module: rabbitmq_user
@@ -107,20 +111,26 @@ options:
 EXAMPLES = '''
 # Add user to server and assign full access control on / vhost.
 # The user might have permission rules for other vhost but you don't care.
-- rabbitmq_user: user=joe
-                 password=changeme
-                 vhost=/
-                 configure_priv=.*
-                 read_priv=.*
-                 write_priv=.*
-                 state=present
+- rabbitmq_user:
+    user: joe
+    password: changeme
+    vhost: /
+    configure_priv: .*
+    read_priv: .*
+    write_priv: .*
+    state: present
 
 # Add user to server and assign full access control on / vhost.
 # The user doesn't have permission rules for other vhosts
-- rabbitmq_user: user=joe
-                 password=changeme
-                 permissions=[{vhost='/', configure_priv='.*', read_priv='.*', write_priv='.*'}]
-                 state=present
+- rabbitmq_user:
+    user: joe
+    password: changeme
+    permissions:
+      - vhost: /
+        configure_priv: .*
+        read_priv: .*
+        write_priv: .*
+    state: present
 '''
 
 class RabbitMqUser(object):
@@ -139,14 +149,14 @@ class RabbitMqUser(object):
         self.bulk_permissions = bulk_permissions
 
         self._tags = None
-        self._permissions = None
+        self._permissions = []
         self._rabbitmqctl = module.get_bin_path('rabbitmqctl', True)
 
     def _exec(self, args, run_in_check_mode=False):
         if not self.module.check_mode or (self.module.check_mode and run_in_check_mode):
             cmd = [self._rabbitmqctl, '-q']
             if self.node is not None:
-                cmd.append(['-n', self.node])
+                cmd.extend(['-n', self.node])
             rc, out, err = self.module.run_command(cmd + args, check_rc=True)
             return out.splitlines()
         return list()
@@ -299,4 +309,6 @@ def main():
 
 # import module snippets
 from ansible.module_utils.basic import *
-main()
+
+if __name__ == '__main__':
+    main()

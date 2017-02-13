@@ -20,6 +20,10 @@
 # You should have received a copy of the GNU General Public License
 # along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
 
+ANSIBLE_METADATA = {'status': ['preview'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 ---
 module: pacman
@@ -40,6 +44,7 @@ options:
             - Name of the package to install, upgrade, or remove.
         required: false
         default: null
+        aliases: [ 'pkg', 'package' ]
 
     state:
         description:
@@ -75,6 +80,7 @@ options:
         required: false
         default: no
         choices: ["yes", "no"]
+        aliases: [ 'update-cache' ]
 
     upgrade:
         description:
@@ -87,28 +93,45 @@ options:
 
 EXAMPLES = '''
 # Install package foo
-- pacman: name=foo state=present
+- pacman:
+    name: foo
+    state: present
 
 # Upgrade package foo
-- pacman: name=foo state=latest update_cache=yes
+- pacman:
+    name: foo
+    state: latest
+    update_cache: yes
 
 # Remove packages foo and bar
-- pacman: name=foo,bar state=absent
+- pacman:
+    name: foo,bar
+    state: absent
 
 # Recursively remove package baz
-- pacman: name=baz state=absent recurse=yes
+- pacman:
+    name: baz
+    state: absent
+    recurse: yes
 
 # Run the equivalent of "pacman -Sy" as a separate step
-- pacman: update_cache=yes
+- pacman:
+    update_cache: yes
 
 # Run the equivalent of "pacman -Su" as a separate step
-- pacman: upgrade=yes
+- pacman:
+    upgrade: yes
 
 # Run the equivalent of "pacman -Syu" as a separate step
-- pacman: update_cache=yes upgrade=yes
+- pacman:
+    update_cache: yes
+    upgrade: yes
 
 # Run the equivalent of "pacman -Rdd", force remove package baz
-- pacman: name=baz state=absent force=yes
+- pacman:
+    name: baz
+    state: absent
+    force: yes
 '''
 
 import shlex
